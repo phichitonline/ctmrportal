@@ -1,6 +1,6 @@
 ﻿$IMAGE_NAME = "amedake01x/ctmr-app"
 $TAG = "latest"
-$WEBHOOK_URL = "https://10.10.8.132:65411/hook?access_key=E09nooMWtpyaNCMhXV8iHZ0P1DLS5ZekVEv4266mkpiKW55g" 
+$WEBHOOK_URL = "https://10.10.8.132:65411/hook?access_key=NQjY6EslPejBygXEVXkxGEl6SILAdIhckohWDDVwTE0lbsd5" 
 
 Write-Host "--- 1. Building Docker Image ---" -ForegroundColor Cyan
 docker build --platform linux/amd64 -t "${IMAGE_NAME}:${TAG}" .
@@ -22,7 +22,8 @@ curl.exe -k -X POST $WEBHOOK_URL
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n✅ สั่ง Deploy บน aaPanel สำเร็จ!" -ForegroundColor Green
-} else {
+}
+else {
     Write-Host "`n❌ ไม่สามารถติดต่อ aaPanel Webhook ได้!" -ForegroundColor Red
     exit 1
 }

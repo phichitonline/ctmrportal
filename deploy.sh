@@ -5,7 +5,7 @@ set -e
 
 IMAGE_NAME="amedake01x/ctmr-app"
 TAG="latest"
-WEBHOOK_URL="https://10.10.8.132:65411/hook?access_key=E09nooMWtpyaNCMhXV8iHZ0P1DLS5ZekVEv4266mkpiKW55g"
+WEBHOOK_URL="https://10.10.8.132:65411/hook?access_key=NQjY6EslPejBygXEVXkxGEl6SILAdIhckohWDDVwTE0lbsd5"
 
 echo -e "\033[0;36m--- 1. Building Docker Image ---\033[0m"
 docker build --platform linux/amd64 -t "${IMAGE_NAME}:${TAG}" .
