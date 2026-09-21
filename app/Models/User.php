@@ -27,6 +27,13 @@ class User extends Authenticatable
         'two_factor_secret',
         'two_factor_recovery_codes',
         'two_factor_confirmed_at',
+        'thaid_id',
+        'pid',
+        'moph_id',
+        'avatar',
+        'department_id',
+        'hospcode',
+        'hname_th',
     ];
 
     protected $hidden = [
