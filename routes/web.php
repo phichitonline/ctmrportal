@@ -8,6 +8,7 @@ use App\Http\Controllers\SocWebboardController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TwoFactorAuthController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\SSOLoginController;
 use Illuminate\Support\Facades\Route;
 
 // Guest routes
@@ -20,8 +21,9 @@ Route::middleware('guest')->group(function () {
     Route::post('/two-factor-challenge', [TwoFactorAuthController::class, 'verifyChallenge'])->name('two-factor.verify');
     Route::post('/two-factor-cancel', [TwoFactorAuthController::class, 'cancelChallenge'])->name('two-factor.cancel');
 
+    #Route::match(['get', 'post'], '/sso/callback', [SSOLoginController::class, 'handle'])->name('sso.callback');
     // MOPH Provider ID Callback
-    Route::get('/auth/moph/callback', [AuthController::class, 'handleMophCallback'])->name('auth.moph.callback');
+    Route::match(['get', 'post'], '/auth/moph/callback', [SSOLoginController::class, 'handle'])->name('auth.moph.callback');
 });
 
 // Authenticated routes

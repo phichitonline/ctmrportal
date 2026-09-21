@@ -16,6 +16,9 @@ services:
       - APP_ENV=${APP_ENV:-production}
       - APP_KEY=${APP_KEY}
       - APP_DEBUG=${APP_DEBUG:-false}
+      - APP_URL=${APP_URL}
+      - ASSET_URL=${ASSET_URL}
+      - SSO_SHARED_SECRET=${SSO_SHARED_SECRET}
       - DB_CONNECTION=${DB_CONNECTION:-mysql}
       - DB_HOST=${DB_HOST:-db}
       - DB_PORT=${DB_PORT:-3306}

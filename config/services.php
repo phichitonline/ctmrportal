@@ -41,4 +41,8 @@ return [
         'state_callback' => env('MOPH_STATE_CALLBACK', 'https://hosinfo.tphcp.go.th/auth/moph/callback'),
     ],
 
+    'sso' => [
+        'shared_secret' => env('SSO_SHARED_SECRET', ''),
+    ],
+
 ];
