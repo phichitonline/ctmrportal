@@ -16,7 +16,7 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 RUN apk add --no-cache git zip unzip
 WORKDIR /app
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-interaction --no-progress --no-scripts --prefer-dist
+RUN composer install --no-dev --no-interaction --no-progress --no-scripts --prefer-dist --ignore-platform-reqs
 COPY . .
 RUN composer dump-autoload --optimize
 
