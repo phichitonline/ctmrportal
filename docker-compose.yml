@@ -5,8 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: laravel-app
-    container_name: laravel-app
+    image: amedake01x/ctmr-app:latest
+    container_name: ctmr-app
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -22,14 +22,14 @@ services:
       - DB_DATABASE=${DB_DATABASE:-laravel}
       - DB_USERNAME=${DB_USERNAME:-sail}
       - DB_PASSWORD=${DB_PASSWORD:-password}
-    # depends_on:
+      # depends_on:
       # - db
     networks:
-      - laravel-network
+      - ctmr-network
 
   db:
     image: mysql:8.0
-    container_name: laravel-db
+    container_name: ctmr-db
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -41,15 +41,15 @@ services:
       MYSQL_USER: ${DB_USERNAME:-sail}
       MYSQL_PASSWORD: ${DB_PASSWORD:-password}
     volumes:
-      # - db-data:/var/lib/mysql
+      - db-data:/var/lib/mysql
     networks:
-      - laravel-network
+      - ctmr-network
     # Optional: uncomment to expose DB port to host
     # ports:
     #   - "3306:3306"
 
 networks:
-  laravel-network:
+  ctmr-network:
     driver: bridge
 
 volumes:
