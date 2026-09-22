@@ -5,6 +5,9 @@ set -e
 echo "Running migrations..."
 php artisan migrate --force
 
+# Remove any development Vite hot file
+rm -f /var/www/html/public/hot
+
 # Clear and cache configurations for production
 echo "Caching configurations..."
 php artisan optimize:clear

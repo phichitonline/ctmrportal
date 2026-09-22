@@ -7,6 +7,9 @@ IMAGE_NAME="amedake01x/ctmr-app"
 TAG="latest"
 WEBHOOK_URL="https://10.10.8.132:65411/hook?access_key=NQjY6EslPejBygXEVXkxGEl6SILAdIhckohWDDVwTE0lbsd5"
 
+# ลบไฟล์ dev hot-reload ชั่วคราวป้องกันไม่ให้หลุดเข้าไปใน production image
+rm -f public/hot
+
 echo -e "\033[0;36m--- 1. Building Docker Image ---\033[0m"
 docker build --platform linux/amd64 -t "${IMAGE_NAME}:${TAG}" .
 

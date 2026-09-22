@@ -49,6 +49,7 @@ WORKDIR /var/www/html
 # Copy application files from builders
 COPY --from=composer_builder /app /var/www/html
 COPY --from=node_builder /app/public/build /var/www/html/public/build
+RUN rm -f /var/www/html/public/hot
 
 # Copy configuration files
 COPY .docker/nginx/nginx.conf /etc/nginx/sites-available/default
