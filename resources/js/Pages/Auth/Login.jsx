@@ -12,7 +12,7 @@ export default function Login({ mophLoginUrl: initialMophUrl }) {
             client_id: '0194e132-099e-7e9b-b25c-a927c7e35d83',
             redirect_uri: 'https://provider.tphcp.go.th/callback',
             response_type: 'code',
-            state: 'https://ctmrportal.tphcp.go.th/auth/moph/callback',
+            state: 'https://ctmrportal.ppho.go.th/auth/moph/callback',
         }).toString()
     );
 
