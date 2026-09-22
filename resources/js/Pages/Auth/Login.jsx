@@ -12,7 +12,7 @@ export default function Login({ mophLoginUrl: initialMophUrl }) {
             client_id: '0194e132-099e-7e9b-b25c-a927c7e35d83',
             redirect_uri: 'https://provider.tphcp.go.th/callback',
             response_type: 'code',
-            state: 'https://hosinfo.tphcp.go.th/auth/moph/callback',
+            state: 'https://ctmrportal.tphcp.go.th/auth/moph/callback',
         }).toString()
     );
 
@@ -68,7 +68,7 @@ export default function Login({ mophLoginUrl: initialMophUrl }) {
                     <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     <span>CTMR SOC Gateway Active</span>
                     <span className="text-slate-600">•</span>
-                    <span className="font-mono text-slate-300">Port: 8090</span>
+                    <span className="font-mono text-slate-300">Port: {typeof window !== 'undefined' && window.location.port ? window.location.port : '8081'}</span>
                 </div>
             </header>
 

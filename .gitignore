@@ -12,6 +12,7 @@ yarn-error.log
 /public/build
 /public/hot
 /public/storage
+/public/fonts-manifest.dev.json
 /storage/*.key
 .DS_Store
 Thumbs.db
