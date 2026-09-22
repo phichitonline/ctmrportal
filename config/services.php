@@ -38,7 +38,7 @@ return [
     'moph' => [
         'client_id' => env('MOPH_CLIENT_ID', '0194e132-099e-7e9b-b25c-a927c7e35d83'),
         'redirect_uri' => env('MOPH_REDIRECT_URI', 'https://provider.tphcp.go.th/callback'),
-        'state_callback' => env('MOPH_STATE_CALLBACK', 'https://hosinfo.tphcp.go.th/auth/moph/callback'),
+        'state_callback' => env('MOPH_STATE_CALLBACK', 'https://ctmrportal.tphcp.go.th/auth/moph/callback'),
     ],
 
     'sso' => [

@@ -25,7 +25,7 @@ class AuthController extends Controller
             'client_id' => $mophConfig['client_id'] ?? '0194e132-099e-7e9b-b25c-a927c7e35d83',
             'redirect_uri' => $mophConfig['redirect_uri'] ?? 'https://provider.tphcp.go.th/callback',
             'response_type' => 'code',
-            'state' => $mophConfig['state_callback'] ?? 'https://hosinfo.tphcp.go.th/auth/moph/callback',
+            'state' => $mophConfig['state_callback'] ?? 'https://ctmrportal.tphcp.go.th/auth/moph/callback',
         ]);
 
         return Inertia::render('Auth/Login', [
