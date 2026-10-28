@@ -36,6 +36,7 @@ export default function Index({
     const [editingSchedule, setEditingSchedule] = useState(null);
     const [isAutoModalOpen, setIsAutoModalOpen] = useState(false);
     const [reportingSchedule, setReportingSchedule] = useState(null);
+    const [reportImagePreviews, setReportImagePreviews] = useState([]);
     const [selectedDayDetail, setSelectedDayDetail] = useState(null);
 
     // Form for Create / Edit Shift
@@ -87,6 +88,7 @@ export default function Index({
         system_affected: 'Wazuh SIEM Cluster, Core Firewall, HIS Server Nodes (13 รพ.)',
         content: '',
         handover_notes: '',
+        images: [],
     });
 
     // Group schedules by date string (YYYY-MM-DD)
@@ -314,6 +316,7 @@ export default function Index({
     const openReportModal = (sched) => {
         clearReportErrors();
         setReportingSchedule(sched);
+        setReportImagePreviews([]);
         const shiftTitle = shiftTypeLabels[sched.shift_type] || sched.shift_type;
         setReportData({
             title: `รายงานผลการเฝ้าระวังศูนย์ SOC ประจำ${shiftTitle} วันที่ ${sched.shift_date_display}`,
@@ -321,7 +324,62 @@ export default function Index({
             system_affected: 'Wazuh SIEM Cluster, Core Firewall, ระบบแม่ข่าย HIS 13 โรงพยาบาล',
             content: `**สรุปผลการปฏิบัติงานเฝ้าระวังศูนย์ SOC (${shiftTitle}):**\n- **ผู้ปฏิบัติหน้าที่เวรหลัก:** ${sched.user_name} (${sched.agency_name || 'สสจ.พิจิตร'})${sched.backup_user_name ? `\n- **ผู้ปฏิบัติหน้าที่เวรสำรอง:** ${sched.backup_user_name}` : ''}\n\n**1. สถานะแม่ข่ายหลักและเครือข่ายจังหวัด:**\n- แม่ข่าย Wazuh SIEM & OpenSearch: ทำงานปกติ (CPU / RAM / Storage อยู่ในเกณฑ์ปกติ)\n- เครือข่าย VPN เชื่อมต่อ 13 หน่วยบริการ: ออนไลน์ปกติ\n\n**2. สถานะการเชื่อมต่อ Wazuh Agents (613 Nodes):**\n- ตรวจสอบสถานะ Agent ในโรงพยาบาลสังกัดจังหวัดพิจิตร เชื่อมต่อส่ง Log เข้าศูนย์ SOC ตามปกติ\n\n**3. เหตุการณ์ความมั่นคงปลอดภัยที่ตรวจพบ (Security Alerts & Incidents):**\n- ไม่พบเหตุการณ์บุกรุกระดับวิกฤต (Critical)\n- คัดกรองและตรวจสอบรายการแจ้งเตือนทั่วไป (Brute Force / Authentication Failure) เรียบร้อยแล้ว`,
             handover_notes: sched.handover_notes || 'ส่งมอบเวรให้กะถัดไปเฝ้าระวังต่อเนื่องตามปกติ',
+            images: [],
         });
+    };
+
+    const handleReportImageFiles = (files) => {
+        const fileList = Array.from(files).filter((f) => f.type.startsWith('image/'));
+        if (fileList.length === 0) return;
+
+        const updatedImages = [...(reportData.images || []), ...fileList];
+        setReportData('images', updatedImages);
+
+        fileList.forEach((file) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setReportImagePreviews((prev) => [
+                    ...prev,
+                    {
+                        name: file.name,
+                        size: (file.size / 1024).toFixed(1) + ' KB',
+                        url: e.target.result,
+                        file: file,
+                    },
+                ]);
+            };
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handleRemoveReportImage = (index) => {
+        const newPreviews = [...reportImagePreviews];
+        newPreviews.splice(index, 1);
+        setReportImagePreviews(newPreviews);
+
+        const newImages = [...(reportData.images || [])];
+        newImages.splice(index, 1);
+        setReportData('images', newImages);
+    };
+
+    const handleReportPaste = (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        const pastedFiles = [];
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const blob = items[i].getAsFile();
+                if (blob) {
+                    const renamed = new File([blob], `screenshot_${Date.now()}.png`, { type: blob.type });
+                    pastedFiles.push(renamed);
+                }
+            }
+        }
+
+        if (pastedFiles.length > 0) {
+            handleReportImageFiles(pastedFiles);
+        }
     };
 
     const handleSubmitReport = (e) => {
@@ -329,9 +387,11 @@ export default function Index({
         if (!reportingSchedule) return;
 
         postReport(`/soc-schedule/${reportingSchedule.id}/submit-report`, {
+            forceFormData: true,
             preserveScroll: true,
             onSuccess: () => {
                 setReportingSchedule(null);
+                setReportImagePreviews([]);
             },
         });
     };
@@ -1777,13 +1837,20 @@ export default function Index({
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                    รายละเอียดผลการเฝ้าระวังประจำเวร (ส่งไปยัง SOC Webboard อัตโนมัติ) <span className="text-rose-500">*</span>
-                                </label>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-xs font-semibold text-slate-700">
+                                        รายละเอียดผลการเฝ้าระวังประจำเวร (ส่งไปยัง SOC Webboard อัตโนมัติ) <span className="text-rose-500">*</span>
+                                    </label>
+                                    <span className="text-[10px] text-slate-400">
+                                        รองรับการกด Ctrl+V / Cmd+V เพื่อวางภาพหน้าจอ
+                                    </span>
+                                </div>
                                 <textarea
-                                    rows="9"
+                                    rows="8"
                                     value={reportData.content}
                                     onChange={(e) => setReportData('content', e.target.value)}
+                                    onPaste={handleReportPaste}
+                                    placeholder="พิมพ์รายละเอียดผลการเฝ้าระวังที่นี่... (สามารถกด Ctrl+V / Cmd+V วางรูปภาพสกรีนช็อตที่นี่ได้ทันที)"
                                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600 font-mono leading-relaxed"
                                     required
                                 />
@@ -1801,6 +1868,74 @@ export default function Index({
                                     placeholder="ระบุสิ่งที่เวรถัดไปต้องติดตามต่อ..."
                                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600"
                                 />
+                            </div>
+
+                            {/* Image Upload & Screenshot Paste Zone */}
+                            <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="block text-xs font-semibold text-slate-700">
+                                        📷 แนบรูปภาพ / สกรีนช็อตหน้าจอการเฝ้าระวัง (Wazuh / Grafana / Firewall)
+                                    </label>
+                                    <span className="text-[10px] text-slate-400">
+                                        PNG, JPG, WebP ไม่เกิน 5MB (ลากวาง หรือกด Ctrl+V วางภาพได้)
+                                    </span>
+                                </div>
+
+                                <div className="border-2 border-dashed border-slate-300 hover:border-emerald-600 rounded-xl p-4 bg-slate-50/60 hover:bg-emerald-50/20 transition text-center cursor-pointer relative">
+                                    <input
+                                        type="file"
+                                        multiple
+                                        accept="image/*"
+                                        onChange={(e) => handleReportImageFiles(e.target.files)}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    />
+                                    <div className="flex flex-col items-center justify-center pointer-events-none">
+                                        <svg className="w-8 h-8 text-slate-400 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                        <div className="text-xs text-slate-700 font-semibold">
+                                            คลิกเพื่อเลือกไฟล์รูปภาพ หรือลากรูปภาพมาวางที่นี่
+                                        </div>
+                                        <div className="text-[10px] text-slate-400 mt-0.5">
+                                            หรือกดแคปเจอร์หน้าจอแล้วกด <kbd className="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-slate-600">Ctrl+V</kbd> ในช่องรายละเอียดได้เลย
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Image Previews Grid */}
+                                {reportImagePreviews.length > 0 && (
+                                    <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                                        {reportImagePreviews.map((img, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="relative group rounded-xl border border-slate-200 overflow-hidden bg-slate-100 shadow-2xs"
+                                            >
+                                                <img
+                                                    src={img.url}
+                                                    alt={img.name}
+                                                    className="w-full h-24 object-cover"
+                                                />
+                                                <div className="p-1.5 bg-white text-[10px] flex items-center justify-between border-t border-slate-100">
+                                                    <span className="truncate max-w-[100px] text-slate-700 font-medium" title={img.name}>
+                                                        {img.name}
+                                                    </span>
+                                                    <span className="text-slate-400 text-[9px]">{img.size}</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveReportImage(idx)}
+                                                    className="absolute top-1.5 right-1.5 bg-rose-600/80 hover:bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow-sm transition cursor-pointer"
+                                                    title="ลบรูปภาพนี้"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {reportErrors.images && <p className="mt-1 text-xs text-rose-600 font-medium">{reportErrors.images}</p>}
+                                {reportErrors.image && <p className="mt-1 text-xs text-rose-600 font-medium">{reportErrors.image}</p>}
                             </div>
 
                             <div className="px-6 py-4 -mx-6 -mb-6 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">

@@ -389,11 +389,17 @@ class SocScheduleController extends Controller
             'system_affected' => ['required', 'string', 'max:255'],
             'content' => ['required', 'string', 'min:10'],
             'handover_notes' => ['nullable', 'string', 'max:1000'],
+            'image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'],
+            'images.*' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'],
         ], [
             'title.required' => 'กรุณาระบุหัวข้อรายงานผลการเฝ้าระวัง',
             'system_affected.required' => 'กรุณาระบุระบบที่ทำการเฝ้าระวัง',
             'content.required' => 'กรุณาระบุรายละเอียดผลการเฝ้าระวัง',
             'content.min' => 'รายละเอียดผลการเฝ้าระวังต้องมีความยาวอย่างน้อย 10 ตัวอักษร',
+            'image.image' => 'ไฟล์แนบต้องเป็นรูปภาพเท่านั้น',
+            'image.max' => 'ขนาดรูปภาพต้องไม่เกิน 5 MB',
+            'images.*.image' => 'ไฟล์แนบต้องเป็นรูปภาพเท่านั้น',
+            'images.*.max' => 'ขนาดรูปภาพแต่ละไฟล์ต้องไม่เกิน 5 MB',
         ]);
 
         $user = Auth::user();
@@ -402,6 +408,23 @@ class SocScheduleController extends Controller
         $contentBody = $validated['content'];
         if (! empty($validated['handover_notes'])) {
             $contentBody .= "\n\n---\n**📌 บันทึกส่งมอบเวรกะถัดไป (Handover Notes):**\n" . $validated['handover_notes'];
+        }
+
+        // Handle uploaded images
+        $uploadedPaths = [];
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $imgFile) {
+                if ($imgFile && $imgFile->isValid()) {
+                    $path = $imgFile->store('soc_reports', 'public');
+                    $uploadedPaths[] = '/storage/' . $path;
+                }
+            }
+        } elseif ($request->hasFile('image')) {
+            $singleImg = $request->file('image');
+            if ($singleImg && $singleImg->isValid()) {
+                $path = $singleImg->store('soc_reports', 'public');
+                $uploadedPaths[] = '/storage/' . $path;
+            }
         }
 
         // Create corresponding SOC Report in soc_topics
@@ -416,6 +439,8 @@ class SocScheduleController extends Controller
             'shift' => $schedule->shift_type,
             'shift_date' => $schedule->shift_date->toDateString(),
             'system_affected' => $validated['system_affected'],
+            'image_path' => ! empty($uploadedPaths) ? $uploadedPaths[0] : null,
+            'images' => ! empty($uploadedPaths) ? $uploadedPaths : null,
             'content' => $contentBody,
             'resolved_by' => in_array($validated['severity'], ['high', 'critical']) ? null : $user->id,
             'resolved_at' => in_array($validated['severity'], ['high', 'critical']) ? null : Carbon::now(),
