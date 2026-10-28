@@ -145,61 +145,6 @@ export default function CtmrLayout({ children, title = 'Overview', activeNav = '
 
                 {/* Right Tools */}
                 <div className="flex items-center gap-2 sm:gap-3">
-                    {/* Node Selector Filter */}
-                    <div className="hidden lg:flex items-center text-xs">
-                        <span className="text-slate-400 mr-1.5 font-medium">มุมมองโหนด:</span>
-                        {isHospitalUser ? (
-                            <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs rounded px-2.5 py-1 flex items-center gap-1.5 font-medium" title="บัญชีผู้ใช้งานถูกล็อกการเข้าถึงเฉพาะโหนดของโรงพยาบาลของคุณ">
-                                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" strokeWidth="2" />
-                                    <path d="M7 11V7a5 5 0 0110 0v4" strokeWidth="2" />
-                                </svg>
-                                <span>{auth?.user?.agency_name} (Agent {auth?.user?.agency_code})</span>
-                            </div>
-                        ) : (
-                            <select
-                                value={selectedAgency.id}
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val === '001') handleSelectHospital('001', 'แม่ข่ายศูนย์เทคโนโลยี สสจ.พิจิตร', '192.168.1.10', 'Rocky Linux 9 / Docker', 'HDC / Gateway', 'Active');
-                                    else if (val === '002') handleSelectHospital('002', 'โรงพยาบาลพิจิตร (HIS/HOSxP)', '192.168.10.254', 'Windows Server 2022', 'HOSxP v4', 'Active');
-                                    else if (val === '003') handleSelectHospital('003', 'รพ.สมเด็จพระยุพราชตะพานหิน', '192.168.20.10', 'Ubuntu 22.04 LTS', 'HOSxP', 'Active');
-                                    else if (val === '004') handleSelectHospital('004', 'รพ.บางมูลนาก', '192.168.30.15', 'Windows Server 2019', 'HOSxP', 'Active');
-                                    else if (val === '005') handleSelectHospital('005', 'รพ.โพทะเล', '192.168.40.8', 'CentOS 7', 'HOSxP', 'Disconnected');
-                                    else handleSelectHospital('all', 'เครือข่ายสาธารณสุขจังหวัดพิจิตร (ทุกโหนด)', '192.168.0.0/16', 'Mixed OS', 'All HIS', 'Active');
-                                }}
-                                className="bg-slate-50 border border-slate-300 text-slate-700 text-xs rounded px-2.5 py-1 focus:ring-1 focus:ring-sky-500 focus:outline-none font-medium cursor-pointer"
-                            >
-                                <option value="all">ทุกโหนดในจังหวัดพิจิตร (613 Nodes)</option>
-                                <option value="001">Agent 001 - แม่ข่ายศูนย์เทคโนโลยี สสจ.พิจิตร</option>
-                                <option value="002">Agent 002 - โรงพยาบาลพิจิตร (HIS/HOSxP)</option>
-                                <option value="003">Agent 003 - รพ.สมเด็จพระยุพราชตะพานหิน</option>
-                                <option value="004">Agent 004 - รพ.บางมูลนาก</option>
-                                <option value="005">Agent 005 - รพ.โพทะเล</option>
-                            </select>
-                        )}
-                    </div>
-
-                    {/* Time Filter */}
-                    <div className="hidden sm:flex items-center bg-slate-100 px-2.5 py-1 rounded text-xs text-slate-600 font-medium">
-                        <svg className="w-3.5 h-3.5 mr-1 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="10" strokeWidth="2"></circle>
-                            <polyline points="12 6 12 12 16 14" strokeWidth="2"></polyline>
-                        </svg>
-                        <span>24 ชม. ล่าสุด</span>
-                    </div>
-
-                    {/* Refresh Button */}
-                    <button
-                        onClick={handleRefresh}
-                        className="p-1.5 rounded hover:bg-slate-100 text-slate-600 transition cursor-pointer"
-                        title="รีเฟรชข้อมูล"
-                    >
-                        <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                    </button>
-
                     {/* USER PROFILE & LOGOUT DROPDOWN */}
                     <div className="relative">
                         <button
@@ -565,44 +510,6 @@ export default function CtmrLayout({ children, title = 'Overview', activeNav = '
                     </Link>
                 </div>
             </aside>
-
-            {/* HOSPITAL CONTEXT SUB-BAR */}
-            <div className="max-w-[1720px] w-full mx-auto px-4 sm:px-6 pt-4">
-                <div className="bg-white border border-[#D3DAE6] rounded-md px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
-                    <div className="flex items-center gap-2.5">
-                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <span className="font-semibold text-slate-800 text-sm">{selectedAgency.name}</span>
-                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono border border-slate-200">
-                            Agent: {selectedAgency.id} ({selectedAgency.status})
-                        </span>
-                        <span className="text-xs text-slate-400">|</span>
-                        <span className="text-xs text-slate-500">
-                            IP: {selectedAgency.ip} • {selectedAgency.os} • HIS: {selectedAgency.his}
-                        </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        {isAdmin ? (
-                            <button
-                                onClick={() => setHospitalModalOpen(true)}
-                                className="text-xs text-[#006BB4] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-                            >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
-                                รายชื่อ 12 โรงพยาบาลในพิจิตร
-                            </button>
-                        ) : (
-                            <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
-                                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
-                                โหนดสังกัด: {auth?.user?.agency_name}
-                            </span>
-                        )}
-                        <span className="text-xs text-slate-300">•</span>
-                        <span className="text-xs text-slate-500">
-                            อัปเดตล่าสุด: <span className="font-mono font-medium text-slate-700">{lastUpdated}</span>
-                        </span>
-                    </div>
-                </div>
-            </div>
 
             {/* PAGE CONTENT */}
             <main className="flex-1 max-w-[1720px] w-full mx-auto p-4 sm:p-6">
