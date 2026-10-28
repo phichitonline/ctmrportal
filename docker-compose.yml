@@ -27,6 +27,8 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-password}
       # depends_on:
       # - db
+    volumes:
+      - ./storage/app/public:/var/www/html/storage/app/public
     networks:
       - ctmr-network
 

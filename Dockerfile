@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y \
     supervisor \
     libpng-dev \
     libjpeg-dev \
+    libwebp-dev \
     libfreetype6-dev \
     libzip-dev \
     zip \
@@ -40,8 +41,9 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd pdo_mysql mbstring zip exif pcntl intl
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install -j$(nproc) gd pdo_mysql mbstring zip exif pcntl intl \
+    && echo "upload_max_filesize = 30M\npost_max_size = 35M\nmemory_limit = 256M" > /usr/local/etc/php/conf.d/uploads.ini
 
 # Set working directory
 WORKDIR /var/www/html

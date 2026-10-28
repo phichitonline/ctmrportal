@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -164,19 +165,24 @@ class SocWebboardController extends Controller
         }
 
         // Handle uploaded images
+        Storage::disk('public')->makeDirectory('soc_reports');
         $uploadedPaths = [];
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $imgFile) {
                 if ($imgFile && $imgFile->isValid()) {
                     $path = $imgFile->store('soc_reports', 'public');
-                    $uploadedPaths[] = '/storage/' . $path;
+                    if ($path) {
+                        $uploadedPaths[] = '/storage/' . $path;
+                    }
                 }
             }
         } elseif ($request->hasFile('image')) {
             $singleImg = $request->file('image');
             if ($singleImg && $singleImg->isValid()) {
                 $path = $singleImg->store('soc_reports', 'public');
-                $uploadedPaths[] = '/storage/' . $path;
+                if ($path) {
+                    $uploadedPaths[] = '/storage/' . $path;
+                }
             }
         }
 
@@ -255,12 +261,15 @@ class SocWebboardController extends Controller
         }
 
         // Handle uploaded images in update
+        Storage::disk('public')->makeDirectory('soc_reports');
         if ($request->hasFile('images')) {
             $existing = $topic->images ?? [];
             foreach ($request->file('images') as $imgFile) {
                 if ($imgFile && $imgFile->isValid()) {
                     $path = $imgFile->store('soc_reports', 'public');
-                    $existing[] = '/storage/' . $path;
+                    if ($path) {
+                        $existing[] = '/storage/' . $path;
+                    }
                 }
             }
             $validated['images'] = $existing;
@@ -269,8 +278,10 @@ class SocWebboardController extends Controller
             $singleImg = $request->file('image');
             if ($singleImg && $singleImg->isValid()) {
                 $path = $singleImg->store('soc_reports', 'public');
-                $validated['image_path'] = '/storage/' . $path;
-                $validated['images'] = [$validated['image_path']];
+                if ($path) {
+                    $validated['image_path'] = '/storage/' . $path;
+                    $validated['images'] = [$validated['image_path']];
+                }
             }
         }
 
