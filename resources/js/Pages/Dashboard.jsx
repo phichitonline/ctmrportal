@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import CtmrLayout from '@/Layouts/CtmrLayout';
 
 export default function Dashboard({
@@ -40,8 +40,23 @@ export default function Dashboard({
         recent_tasks: [],
         latest_docs: [],
     },
+    socScheduleSummary = {
+        today_date_display: '',
+        tomorrow_date_display: '',
+        today_shifts: [],
+        tomorrow_shifts: [],
+        stats: {
+            total_month: 0,
+            completed_month: 0,
+            checked_in_now: 0,
+            overdue_month: 0,
+            compliance_rate: 100,
+        },
+    },
     lastUpdated = '',
 }) {
+    const { auth } = usePage().props;
+    const currentUser = auth?.user;
     const [hospitalFilter, setHospitalFilter] = useState('all');
     const [hospitalSearch, setHospitalSearch] = useState('');
     const [selectedHospitalDetail, setSelectedHospitalDetail] = useState(null);
@@ -97,6 +112,74 @@ export default function Dashboard({
             default:
                 return 'เวรประจำวัน (24 ชม.)';
         }
+    };
+
+    const getShiftStyle = (shiftType) => {
+        switch (shiftType) {
+            case 'morning':
+                return {
+                    badge: 'bg-sky-600 text-white',
+                    lightBg: 'bg-sky-50/70 border-sky-200',
+                    icon: '🌤️',
+                    short: 'เวรเช้า (08:00-16:00)',
+                };
+            case 'afternoon':
+                return {
+                    badge: 'bg-amber-500 text-white',
+                    lightBg: 'bg-amber-50/70 border-amber-200',
+                    icon: '🌅',
+                    short: 'เวรบ่าย (16:00-24:00)',
+                };
+            case 'night':
+                return {
+                    badge: 'bg-indigo-600 text-white',
+                    lightBg: 'bg-indigo-50/70 border-indigo-200',
+                    icon: '🌙',
+                    short: 'เวรดึก (00:00-08:00)',
+                };
+            default:
+                return {
+                    badge: 'bg-teal-600 text-white',
+                    lightBg: 'bg-teal-50/70 border-teal-200',
+                    icon: '🛡️',
+                    short: 'เวร 24 ชม.',
+                };
+        }
+    };
+
+    const getDutyStatusBadge = (status) => {
+        switch (status) {
+            case 'completed':
+                return {
+                    dot: 'bg-emerald-500',
+                    bg: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+                    label: 'ส่งรายงานผลแล้ว',
+                };
+            case 'checked_in':
+                return {
+                    dot: 'bg-blue-500 animate-ping',
+                    bg: 'bg-blue-100 text-blue-800 border-blue-300',
+                    label: 'กำลังเข้าเวร (On-Duty)',
+                };
+            case 'missed':
+                return {
+                    dot: 'bg-rose-500',
+                    bg: 'bg-rose-100 text-rose-800 border-rose-300',
+                    label: 'ค้างส่งรายงาน',
+                };
+            default:
+                return {
+                    dot: 'bg-slate-400',
+                    bg: 'bg-slate-100 text-slate-700 border-slate-300',
+                    label: 'รอเข้าเวร',
+                };
+        }
+    };
+
+    const handleQuickCheckIn = (scheduleId) => {
+        router.patch(`/soc-schedule/${scheduleId}/check-in`, {}, {
+            preserveScroll: true,
+        });
     };
 
     return (
@@ -164,6 +247,252 @@ export default function Dashboard({
                                 </svg>
                                 <span>{isSyncing ? 'กำลังซิงค์...' : 'Refresh Sync'}</span>
                             </button>
+                        </div>
+                    </div>
+
+                    {/* SOC ON-DUTY ROSTER & SURVEILLANCE STATUS BANNER (TOP OF DASHBOARD) */}
+                    <div className="bg-white border border-[#D3DAE6] rounded-xl shadow-xs overflow-hidden">
+                        {/* Header Strip */}
+                        <div className="bg-gradient-to-r from-[#0F172A] via-[#003B64] to-[#006BB4] px-5 py-3.5 text-white flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 -ml-3.5"></span>
+                                    <span>SOC ON-DUTY WATCH</span>
+                                </span>
+                                <h2 className="text-sm sm:text-base font-bold tracking-tight">
+                                    สรุปตารางเวรและสถานะผู้ปฏิบัติหน้าที่เฝ้าระวังศูนย์ SOC ประจำวันนี้ ({socScheduleSummary.today_date_display})
+                                </h2>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                                <div className="hidden sm:flex items-center gap-3 bg-white/10 px-3 py-1 rounded-lg border border-white/15 mr-1">
+                                    <div>
+                                        <span className="text-sky-200 text-[11px]">เวรเดือนนี้:</span>{' '}
+                                        <strong className="text-white">{socScheduleSummary.stats?.total_month || 0} กะ</strong>
+                                    </div>
+                                    <span className="text-white/20">|</span>
+                                    <div>
+                                        <span className="text-emerald-200 text-[11px]">รายงานแล้ว:</span>{' '}
+                                        <strong className="text-emerald-300">{socScheduleSummary.stats?.completed_month || 0} กะ</strong>
+                                    </div>
+                                    <span className="text-white/20">|</span>
+                                    <div>
+                                        <span className="text-amber-200 text-[11px]">ความครบถ้วน:</span>{' '}
+                                        <strong className="text-amber-300">{socScheduleSummary.stats?.compliance_rate ?? 100}%</strong>
+                                    </div>
+                                </div>
+
+                                <Link
+                                    href="/soc-schedule"
+                                    className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold px-3.5 py-1.5 rounded-lg shadow-2xs transition flex items-center gap-1.5"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" strokeWidth="2"></rect>
+                                        <line x1="16" y1="2" x2="16" y2="6" strokeWidth="2"></line>
+                                        <line x1="8" y1="2" x2="8" y2="6" strokeWidth="2"></line>
+                                        <line x1="3" y1="10" x2="21" y2="10" strokeWidth="2"></line>
+                                    </svg>
+                                    <span>เปิดปฏิทินตารางเวร / ส่งรายงาน</span>
+                                </Link>
+                            </div>
+                        </div>
+
+                        {/* Body Content: Today's Active Shifts + Tomorrow Preview */}
+                        <div className="p-4 bg-slate-50/50 grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch">
+                            {/* Left 9 cols: Today's On-Duty Officers */}
+                            <div className="xl:col-span-9 flex flex-col justify-between">
+                                <div className="flex items-center justify-between mb-2.5">
+                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                                        <span className="w-2 h-2 rounded-full bg-[#006BB4]"></span>
+                                        <span>ผู้ปฏิบัติหน้าที่เฝ้าระวังประจำวันนี้ ({socScheduleSummary.today_shifts?.length || 0} กะ)</span>
+                                    </div>
+                                    <span className="text-[11px] text-slate-500">
+                                        คลิกปุ่มเช็คอินเพื่อเริ่มเข้าเวร หรือกดส่งรายงานผลเฝ้าระวังเมื่อสิ้นสุดกะ
+                                    </span>
+                                </div>
+
+                                {(!socScheduleSummary.today_shifts || socScheduleSummary.today_shifts.length === 0) ? (
+                                    <div className="bg-white border border-dashed border-slate-300 rounded-lg p-5 text-center text-xs text-slate-500">
+                                        ยังไม่มีรายการกำหนดเวรประจำวันนี้ —{' '}
+                                        <Link href="/soc-schedule" className="text-[#006BB4] font-semibold underline">
+                                            คลิกเพื่อไปกำหนดตารางเวร
+                                        </Link>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {socScheduleSummary.today_shifts.map((shift) => {
+                                            const sStyle = getShiftStyle(shift.shift_type);
+                                            const dBadge = getDutyStatusBadge(shift.status);
+                                            const isMyShift =
+                                                currentUser &&
+                                                (currentUser.id === shift.user_id || currentUser.id === shift.backup_user_id);
+
+                                            return (
+                                                <div
+                                                    key={shift.id}
+                                                    className={`bg-white rounded-lg border p-3.5 flex flex-col justify-between shadow-2xs transition ${
+                                                        isMyShift
+                                                            ? 'border-[#006BB4] ring-1 ring-[#006BB4]/30'
+                                                            : 'border-slate-200 hover:border-slate-300'
+                                                    }`}
+                                                >
+                                                    <div>
+                                                        {/* Top Row: Shift Badge & Status Pill */}
+                                                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-bold ${sStyle.badge}`}>
+                                                                <span>{sStyle.icon}</span>
+                                                                <span>{sStyle.short}</span>
+                                                            </span>
+
+                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${dBadge.bg}`}>
+                                                                <span className={`w-1.5 h-1.5 rounded-full ${dBadge.dot}`}></span>
+                                                                <span>{dBadge.label}</span>
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Primary Officer Details */}
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <div>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="text-sm font-bold text-slate-800">
+                                                                        {shift.user_name}
+                                                                    </span>
+                                                                    {isMyShift && (
+                                                                        <span className="px-1.5 py-0.2 bg-[#006BB4] text-white text-[10px] font-bold rounded">
+                                                                            เวรของคุณ
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-[11px] text-slate-500 mt-0.5">
+                                                                    {shift.user_position} •{' '}
+                                                                    <span className="font-mono font-semibold text-[#006BB4]">
+                                                                        {shift.user_provider_id}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-[11px] text-slate-600 font-medium mt-0.5">
+                                                                    🏥 {shift.agency_code} - {shift.agency_name}
+                                                                </div>
+                                                            </div>
+
+                                                            {shift.backup_user_name && (
+                                                                <div className="text-right shrink-0 bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                                                    <div className="text-[10px] text-slate-400 font-semibold">เวรสำรอง</div>
+                                                                    <div className="text-[11px] font-semibold text-slate-700">
+                                                                        {shift.backup_user_name}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Bottom Action Bar */}
+                                                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
+                                                        <span className="text-slate-400">
+                                                            {shift.checked_in_at
+                                                                ? `⏱️ เช็คอินเมื่อ ${shift.checked_in_at}`
+                                                                : 'รอเช็คอินเข้าเวร'}
+                                                        </span>
+
+                                                        <div className="flex items-center gap-1.5">
+                                                            {shift.status === 'scheduled' && (
+                                                                <button
+                                                                    onClick={() => handleQuickCheckIn(shift.id)}
+                                                                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded transition cursor-pointer"
+                                                                >
+                                                                    เช็คอินรับเวร
+                                                                </button>
+                                                            )}
+
+                                                            {shift.status !== 'completed' ? (
+                                                                <Link
+                                                                    href="/soc-schedule"
+                                                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded transition"
+                                                                >
+                                                                    📝 ส่งรายงานเวร
+                                                                </Link>
+                                                            ) : shift.soc_topic_id ? (
+                                                                <Link
+                                                                    href={`/webboard/${shift.soc_topic_id}`}
+                                                                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold rounded transition"
+                                                                >
+                                                                    ดูรายงาน #{shift.soc_topic_id}
+                                                                </Link>
+                                                            ) : (
+                                                                <span className="text-emerald-600 font-semibold">✓ เรียบร้อย</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Right 3 cols: Tomorrow's Upcoming Watch & Quick Stats */}
+                            <div className="xl:col-span-3 bg-white border border-slate-200 rounded-lg p-3.5 flex flex-col justify-between">
+                                <div>
+                                    <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2.5">
+                                        <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                            <span>⏭️</span>
+                                            <span>เวรวันพรุ่งนี้ ({socScheduleSummary.tomorrow_date_display})</span>
+                                        </span>
+                                        <Link href="/soc-schedule" className="text-[11px] text-[#006BB4] hover:underline font-semibold">
+                                            ดูทั้งเดือน →
+                                        </Link>
+                                    </div>
+
+                                    {(!socScheduleSummary.tomorrow_shifts || socScheduleSummary.tomorrow_shifts.length === 0) ? (
+                                        <p className="text-xs text-slate-400 py-4 text-center">ยังไม่ได้กำหนดเวรวันพรุ่งนี้</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {socScheduleSummary.tomorrow_shifts.map((tmr) => {
+                                                const tStyle = getShiftStyle(tmr.shift_type);
+                                                return (
+                                                    <div
+                                                        key={tmr.id}
+                                                        className={`px-2.5 py-2 rounded border text-xs flex items-center justify-between gap-2 ${tStyle.lightBg}`}
+                                                    >
+                                                        <div className="truncate">
+                                                            <div className="font-bold text-slate-800 truncate">
+                                                                {tStyle.icon} {tmr.user_name}
+                                                            </div>
+                                                            <div className="text-[10px] text-slate-500 truncate">
+                                                                {tStyle.short} • {tmr.agency_name}
+                                                            </div>
+                                                        </div>
+                                                        <span className="font-mono text-[10px] px-1.5 py-0.5 bg-white/80 rounded border border-slate-200 text-slate-600 shrink-0">
+                                                            {tmr.agency_code}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-3 pt-2.5 border-t border-slate-100 grid grid-cols-3 gap-1.5 text-center">
+                                    <div className="bg-sky-50/70 rounded p-1.5 border border-sky-100">
+                                        <div className="text-[10px] text-slate-500">กำลังเข้าเวร</div>
+                                        <div className="text-xs font-bold text-[#006BB4]">
+                                            {socScheduleSummary.stats?.checked_in_now || 0} กะ
+                                        </div>
+                                    </div>
+                                    <div className="bg-emerald-50/70 rounded p-1.5 border border-emerald-100">
+                                        <div className="text-[10px] text-slate-500">ส่งรายงานแล้ว</div>
+                                        <div className="text-xs font-bold text-emerald-700">
+                                            {socScheduleSummary.stats?.completed_month || 0} กะ
+                                        </div>
+                                    </div>
+                                    <div className="bg-rose-50/70 rounded p-1.5 border border-rose-100">
+                                        <div className="text-[10px] text-slate-500">ค้างรายงาน</div>
+                                        <div className="text-xs font-bold text-rose-600">
+                                            {socScheduleSummary.stats?.overdue_month || 0} กะ
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

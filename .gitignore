@@ -14,5 +14,6 @@ yarn-error.log
 /public/storage
 /public/fonts-manifest.dev.json
 /storage/*.key
+/storage/pail
 .DS_Store
 Thumbs.db

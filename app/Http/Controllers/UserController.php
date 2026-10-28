@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Hospcode;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -45,6 +46,8 @@ class UserController extends Controller
                     ->orWhere('provider_id', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
                     ->orWhere('agency_name', 'like', "%{$search}%")
+                    ->orWhere('hname_th', 'like', "%{$search}%")
+                    ->orWhere('hospcode', 'like', "%{$search}%")
                     ->orWhere('position', 'like', "%{$search}%");
             });
         }
@@ -54,7 +57,10 @@ class UserController extends Controller
         }
 
         if ($agency = $request->input('agency_code')) {
-            $query->where('agency_code', $agency);
+            $query->where(function ($q) use ($agency) {
+                $q->where('agency_code', $agency)
+                    ->orWhere('hospcode', $agency);
+            });
         }
 
         if ($request->filled('status')) {
@@ -64,13 +70,15 @@ class UserController extends Controller
         $users = $query->orderBy('id', 'desc')->paginate(15)->withQueryString()
             ->through(function ($user) {
                 return [
-                    'id' => $user->id,
+            'id' => $user->id,
                     'name' => $user->name,
                     'provider_id' => $user->provider_id,
                     'email' => $user->email,
                     'role' => $user->role,
-                    'agency_code' => $user->agency_code,
-                    'agency_name' => $user->agency_name,
+                    'agency_code' => $user->hospcode ?: $user->agency_code,
+                    'agency_name' => $user->hname_th ?: $user->agency_name,
+                    'hospcode' => $user->hospcode ?: $user->agency_code,
+                    'hname_th' => $user->hname_th ?: $user->agency_name,
                     'position' => $user->position,
                     'phone' => $user->phone,
                     'is_active' => $user->is_active,
@@ -88,6 +96,20 @@ class UserController extends Controller
             'two_factor_active' => User::whereNotNull('two_factor_confirmed_at')->count(),
         ];
 
+        $hospcodes = Hospcode::orderBy('hospcode')
+            ->get(['hospcode', 'name', 'hosptype'])
+            ->map(fn ($item) => [
+                'code' => $item->hospcode,
+                'hospcode' => $item->hospcode,
+                'name' => $item->name,
+                'type' => $item->hosptype ?? '',
+            ])
+            ->toArray();
+
+        if (empty($hospcodes)) {
+            $hospcodes = self::$agencies;
+        }
+
         return Inertia::render('Users/Index', [
             'users' => $users,
             'filters' => [
@@ -96,7 +118,8 @@ class UserController extends Controller
                 'agency_code' => $request->input('agency_code', ''),
                 'status' => $request->input('status', ''),
             ],
-            'agencies' => self::$agencies,
+            'agencies' => $hospcodes,
+            'hospcodes' => $hospcodes,
             'stats' => $stats,
         ]);
     }
@@ -126,9 +149,14 @@ class UserController extends Controller
             'agency_code.required' => 'กรุณาเลือกหน่วยงาน/โรงพยาบาลสังกัด',
         ]);
 
-        // Look up agency name from code
-        $agencyMatch = collect(self::$agencies)->firstWhere('code', $validated['agency_code']);
-        $agencyName = $agencyMatch['name'] ?? 'สำนักงานสาธารณสุขจังหวัดพิจิตร';
+        // Look up agency name from hospcode table (or fallback to static list)
+        $hospcodeRecord = Hospcode::where('hospcode', $validated['agency_code'])->first();
+        if ($hospcodeRecord) {
+            $agencyName = $hospcodeRecord->name;
+        } else {
+            $agencyMatch = collect(self::$agencies)->firstWhere('code', $validated['agency_code']);
+            $agencyName = $agencyMatch['name'] ?? 'สำนักงานสาธารณสุขจังหวัดพิจิตร';
+        }
 
         User::create([
             'name' => $validated['name'],
@@ -138,6 +166,8 @@ class UserController extends Controller
             'role' => $validated['role'],
             'agency_code' => $validated['agency_code'],
             'agency_name' => $agencyName,
+            'hospcode' => $validated['agency_code'],
+            'hname_th' => $agencyName,
             'position' => $validated['position'] ?? null,
             'phone' => $validated['phone'] ?? null,
             'is_active' => $request->boolean('is_active', true),
@@ -170,8 +200,13 @@ class UserController extends Controller
             'agency_code.required' => 'กรุณาเลือกหน่วยงาน/โรงพยาบาลสังกัด',
         ]);
 
-        $agencyMatch = collect(self::$agencies)->firstWhere('code', $validated['agency_code']);
-        $agencyName = $agencyMatch['name'] ?? $user->agency_name;
+        $hospcodeRecord = Hospcode::where('hospcode', $validated['agency_code'])->first();
+        if ($hospcodeRecord) {
+            $agencyName = $hospcodeRecord->name;
+        } else {
+            $agencyMatch = collect(self::$agencies)->firstWhere('code', $validated['agency_code']);
+            $agencyName = $agencyMatch['name'] ?? $user->agency_name;
+        }
 
         $updateData = [
             'name' => $validated['name'],
@@ -180,6 +215,8 @@ class UserController extends Controller
             'role' => $validated['role'],
             'agency_code' => $validated['agency_code'],
             'agency_name' => $agencyName,
+            'hospcode' => $validated['agency_code'],
+            'hname_th' => $agencyName,
             'position' => $validated['position'] ?? null,
             'phone' => $validated['phone'] ?? null,
             'is_active' => $request->boolean('is_active', true),

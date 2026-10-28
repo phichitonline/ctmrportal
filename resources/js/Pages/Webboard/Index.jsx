@@ -271,6 +271,18 @@ export default function Index({
 
                         {/* Fast Action Buttons */}
                         <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            <Link
+                                href="/soc-schedule"
+                                className="bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold text-xs px-3.5 py-2.5 rounded-lg shadow-sm flex items-center gap-1.5 transition cursor-pointer"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" strokeWidth="2"></rect>
+                                    <line x1="16" y1="2" x2="16" y2="6" strokeWidth="2"></line>
+                                    <line x1="8" y1="2" x2="8" y2="6" strokeWidth="2"></line>
+                                    <line x1="3" y1="10" x2="21" y2="10" strokeWidth="2"></line>
+                                </svg>
+                                ปฏิทินตารางเวร SOC
+                            </Link>
                             <button
                                 onClick={() => openCreateModal('soc_report')}
                                 className="bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-xs px-3.5 py-2.5 rounded-lg shadow-sm flex items-center gap-1.5 transition cursor-pointer"

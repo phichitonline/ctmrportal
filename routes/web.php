@@ -4,6 +4,7 @@ use App\Http\Controllers\AboutController;
 use App\Http\Controllers\AgencyDocumentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\SocScheduleController;
 use App\Http\Controllers\SocWebboardController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TwoFactorAuthController;
@@ -48,6 +49,17 @@ Route::middleware('auth')->group(function () {
         Route::post('/{topic}/comments', [SocWebboardController::class, 'storeComment'])->name('comments.store');
         Route::delete('/comments/{comment}', [SocWebboardController::class, 'destroyComment'])->name('comments.destroy');
         Route::patch('/comments/{comment}/solution', [SocWebboardController::class, 'toggleSolution'])->name('comments.solution');
+    });
+
+    // SOC Duty Roster & Surveillance Calendar
+    Route::prefix('soc-schedule')->name('soc-schedule.')->group(function () {
+        Route::get('/', [SocScheduleController::class, 'index'])->name('index');
+        Route::post('/', [SocScheduleController::class, 'store'])->name('store');
+        Route::post('/auto-generate', [SocScheduleController::class, 'autoGenerate'])->name('auto-generate');
+        Route::put('/{schedule}', [SocScheduleController::class, 'update'])->name('update');
+        Route::delete('/{schedule}', [SocScheduleController::class, 'destroy'])->name('destroy');
+        Route::patch('/{schedule}/check-in', [SocScheduleController::class, 'checkIn'])->name('check-in');
+        Route::post('/{schedule}/submit-report', [SocScheduleController::class, 'submitReport'])->name('submit-report');
     });
 
     // Agency Document & Step Timeline Management

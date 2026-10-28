@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import CtmrLayout from '../../Layouts/CtmrLayout';
 
-export default function Index({ users, filters, agencies, stats }) {
+export default function Index({ users, filters, agencies = [], hospcodes = [], stats }) {
     const { auth, flash, errors } = usePage().props;
+    const hospitalOptions = hospcodes.length > 0 ? hospcodes : agencies;
+    const defaultAgencyCode = hospitalOptions[0]?.hospcode || hospitalOptions[0]?.code || '10726';
 
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
     const [selectedRole, setSelectedRole] = useState(filters.role || '');
@@ -23,7 +25,7 @@ export default function Index({ users, filters, agencies, stats }) {
         email: '',
         password: '',
         role: 'hospital_user',
-        agency_code: '002',
+        agency_code: defaultAgencyCode,
         position: '',
         phone: '',
         is_active: true,
@@ -70,7 +72,7 @@ export default function Index({ users, filters, agencies, stats }) {
             email: '',
             password: '',
             role: 'hospital_user',
-            agency_code: '002',
+            agency_code: defaultAgencyCode,
             position: '',
             phone: '',
             is_active: true,
@@ -87,7 +89,7 @@ export default function Index({ users, filters, agencies, stats }) {
             email: user.email || '',
             password: '',
             role: user.role,
-            agency_code: user.agency_code,
+            agency_code: user.hospcode || user.agency_code || defaultAgencyCode,
             position: user.position || '',
             phone: user.phone || '',
             is_active: Boolean(user.is_active),
@@ -287,11 +289,14 @@ export default function Index({ users, filters, agencies, stats }) {
                                 className="w-full py-2 px-3 text-xs bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#006BB4]"
                             >
                                 <option value="">-- ทุกโรงพยาบาล/สังกัด --</option>
-                                {agencies.map((ag) => (
-                                    <option key={ag.code} value={ag.code}>
-                                        {ag.code} - {ag.name}
-                                    </option>
-                                ))}
+                                {hospitalOptions.map((ag) => {
+                                    const code = ag.hospcode || ag.code;
+                                    return (
+                                        <option key={code} value={code}>
+                                            {code} - {ag.name}
+                                        </option>
+                                    );
+                                })}
                             </select>
                         </div>
 
@@ -585,11 +590,14 @@ export default function Index({ users, filters, agencies, stats }) {
                                         onChange={(e) => setData('agency_code', e.target.value)}
                                         className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#006BB4]"
                                     >
-                                        {agencies.map((ag) => (
-                                            <option key={ag.code} value={ag.code}>
-                                                {ag.code} - {ag.name}
-                                            </option>
-                                        ))}
+                                        {hospitalOptions.map((ag) => {
+                                            const code = ag.hospcode || ag.code;
+                                            return (
+                                                <option key={code} value={code}>
+                                                    {code} - {ag.name}
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                     {formErrors.agency_code && <p className="mt-1 text-xs text-rose-600">{formErrors.agency_code}</p>}
                                 </div>
@@ -769,11 +777,14 @@ export default function Index({ users, filters, agencies, stats }) {
                                         onChange={(e) => setData('agency_code', e.target.value)}
                                         className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#006BB4]"
                                     >
-                                        {agencies.map((ag) => (
-                                            <option key={ag.code} value={ag.code}>
-                                                {ag.code} - {ag.name}
-                                            </option>
-                                        ))}
+                                        {hospitalOptions.map((ag) => {
+                                            const code = ag.hospcode || ag.code;
+                                            return (
+                                                <option key={code} value={code}>
+                                                    {code} - {ag.name}
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 </div>
                             </div>
