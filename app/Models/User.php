@@ -26,6 +26,14 @@ class User extends Authenticatable
         'agency_name',
         'position',
         'phone',
+        'telegram_chat_id',
+        'telegram_username',
+        'telegram_linked_at',
+        'line_user_id',
+        'line_display_name',
+        'line_linked_at',
+        'notification_link_token',
+        'notification_preferences',
         'department_id',
         'hospcode',
         'hname_th',
@@ -53,7 +61,37 @@ class User extends Authenticatable
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_confirmed_at' => 'datetime',
+            'telegram_linked_at' => 'datetime',
+            'line_linked_at' => 'datetime',
+            'notification_preferences' => 'array',
         ];
+    }
+
+    public static function defaultNotificationPreferences(): array
+    {
+        return [
+            'notify_shift_assigned' => true,
+            'notify_shift_reminder' => true,
+            'notify_soc_report' => true,
+            'notify_incident_alert' => true,
+            'telegram_enabled' => true,
+            'line_enabled' => true,
+        ];
+    }
+
+    public function getNotificationPrefs(): array
+    {
+        return array_merge(
+            self::defaultNotificationPreferences(),
+            is_array($this->notification_preferences) ? $this->notification_preferences : []
+        );
+    }
+
+    public function wantsNotification(string $key): bool
+    {
+        $prefs = $this->getNotificationPrefs();
+
+        return (bool) ($prefs[$key] ?? true);
     }
 
     public function isAdmin(): bool

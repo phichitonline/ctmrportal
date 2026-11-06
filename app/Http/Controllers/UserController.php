@@ -67,10 +67,32 @@ class UserController extends Controller
             $query->where('is_active', $request->boolean('status'));
         }
 
+        if ($channel = $request->input('channel')) {
+            if ($channel === 'telegram') {
+                $query->whereNotNull('telegram_chat_id')->where('telegram_chat_id', '!=', '');
+            } elseif ($channel === 'line') {
+                $query->whereNotNull('line_user_id')->where('line_user_id', '!=', '');
+            } elseif ($channel === 'any') {
+                $query->where(function ($q) {
+                    $q->where(function ($sub) {
+                        $sub->whereNotNull('telegram_chat_id')->where('telegram_chat_id', '!=', '');
+                    })->orWhere(function ($sub) {
+                        $sub->whereNotNull('line_user_id')->where('line_user_id', '!=', '');
+                    });
+                });
+            } elseif ($channel === 'unlinked') {
+                $query->where(function ($q) {
+                    $q->whereNull('telegram_chat_id')->orWhere('telegram_chat_id', '');
+                })->where(function ($q) {
+                    $q->whereNull('line_user_id')->orWhere('line_user_id', '');
+                });
+            }
+        }
+
         $users = $query->orderBy('id', 'desc')->paginate(15)->withQueryString()
             ->through(function ($user) {
                 return [
-            'id' => $user->id,
+                    'id' => $user->id,
                     'name' => $user->name,
                     'provider_id' => $user->provider_id,
                     'email' => $user->email,
@@ -81,6 +103,14 @@ class UserController extends Controller
                     'hname_th' => $user->hname_th ?: $user->agency_name,
                     'position' => $user->position,
                     'phone' => $user->phone,
+                    'has_telegram' => ! empty($user->telegram_chat_id),
+                    'telegram_chat_id' => $user->telegram_chat_id,
+                    'telegram_username' => $user->telegram_username,
+                    'telegram_linked_at' => $user->telegram_linked_at?->format('d/m/Y H:i'),
+                    'has_line' => ! empty($user->line_user_id),
+                    'line_user_id' => $user->line_user_id,
+                    'line_display_name' => $user->line_display_name,
+                    'line_linked_at' => $user->line_linked_at?->format('d/m/Y H:i'),
                     'is_active' => $user->is_active,
                     'has_2fa' => $user->hasEnabledTwoFactor(),
                     'last_login_at' => $user->last_login_at?->format('d/m/Y H:i'),
@@ -94,6 +124,8 @@ class UserController extends Controller
             'admins' => User::where('role', 'admin')->count(),
             'hospital_users' => User::where('role', 'hospital_user')->count(),
             'two_factor_active' => User::whereNotNull('two_factor_confirmed_at')->count(),
+            'telegram_linked' => User::whereNotNull('telegram_chat_id')->where('telegram_chat_id', '!=', '')->count(),
+            'line_linked' => User::whereNotNull('line_user_id')->where('line_user_id', '!=', '')->count(),
         ];
 
         $hospcodes = Hospcode::orderBy('hospcode')
@@ -117,6 +149,7 @@ class UserController extends Controller
                 'role' => $request->input('role', ''),
                 'agency_code' => $request->input('agency_code', ''),
                 'status' => $request->input('status', ''),
+                'channel' => $request->input('channel', ''),
             ],
             'agencies' => $hospcodes,
             'hospcodes' => $hospcodes,
@@ -138,6 +171,10 @@ class UserController extends Controller
             'agency_code' => ['required', 'string'],
             'position' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
+            'telegram_chat_id' => ['nullable', 'string', 'max:100'],
+            'telegram_username' => ['nullable', 'string', 'max:100'],
+            'line_user_id' => ['nullable', 'string', 'max:100'],
+            'line_display_name' => ['nullable', 'string', 'max:100'],
             'is_active' => ['boolean'],
         ], [
             'name.required' => 'กรุณาระบุชื่อ-นามสกุล',
@@ -170,6 +207,12 @@ class UserController extends Controller
             'hname_th' => $agencyName,
             'position' => $validated['position'] ?? null,
             'phone' => $validated['phone'] ?? null,
+            'telegram_chat_id' => ! empty($validated['telegram_chat_id']) ? trim($validated['telegram_chat_id']) : null,
+            'telegram_username' => ! empty($validated['telegram_username']) ? ltrim(trim($validated['telegram_username']), '@') : null,
+            'telegram_linked_at' => ! empty($validated['telegram_chat_id']) ? now() : null,
+            'line_user_id' => ! empty($validated['line_user_id']) ? trim($validated['line_user_id']) : null,
+            'line_display_name' => ! empty($validated['line_display_name']) ? trim($validated['line_display_name']) : null,
+            'line_linked_at' => ! empty($validated['line_user_id']) ? now() : null,
             'is_active' => $request->boolean('is_active', true),
         ]);
 
@@ -190,6 +233,10 @@ class UserController extends Controller
             'agency_code' => ['required', 'string'],
             'position' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
+            'telegram_chat_id' => ['nullable', 'string', 'max:100'],
+            'telegram_username' => ['nullable', 'string', 'max:100'],
+            'line_user_id' => ['nullable', 'string', 'max:100'],
+            'line_display_name' => ['nullable', 'string', 'max:100'],
             'is_active' => ['boolean'],
         ], [
             'name.required' => 'กรุณาระบุชื่อ-นามสกุล',
@@ -219,6 +266,12 @@ class UserController extends Controller
             'hname_th' => $agencyName,
             'position' => $validated['position'] ?? null,
             'phone' => $validated['phone'] ?? null,
+            'telegram_chat_id' => ! empty($validated['telegram_chat_id']) ? trim($validated['telegram_chat_id']) : null,
+            'telegram_username' => ! empty($validated['telegram_username']) ? ltrim(trim($validated['telegram_username']), '@') : null,
+            'telegram_linked_at' => ! empty($validated['telegram_chat_id']) ? ($user->telegram_linked_at ?? now()) : null,
+            'line_user_id' => ! empty($validated['line_user_id']) ? trim($validated['line_user_id']) : null,
+            'line_display_name' => ! empty($validated['line_display_name']) ? trim($validated['line_display_name']) : null,
+            'line_linked_at' => ! empty($validated['line_user_id']) ? ($user->line_linked_at ?? now()) : null,
             'is_active' => $request->boolean('is_active', true),
         ];
 

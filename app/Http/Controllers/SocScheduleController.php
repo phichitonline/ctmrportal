@@ -6,6 +6,7 @@ use App\Models\Hospcode;
 use App\Models\SocShiftSchedule;
 use App\Models\SocTopic;
 use App\Models\User;
+use App\Services\MessagingNotificationService;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\RedirectResponse;
@@ -220,6 +221,35 @@ class SocScheduleController extends Controller
             'handover_notes' => $validated['handover_notes'] ?? null,
             'created_by' => Auth::id(),
         ]);
+
+        // Send Telegram / LINE notification to assigned user
+        try {
+            $shiftLabel = SocShiftSchedule::$shiftTypeLabels[$validated['shift_type']] ?? $validated['shift_type'];
+            $dateDisplay = Carbon::parse($validated['shift_date'])->format('d/m/Y');
+            $msg = "📅 แจ้งเตือนมอบหมายตารางเวร SOC\n"
+                . "━━━━━━━━━━━━━━━━━━\n"
+                . "👤 ผู้ปฏิบัติหน้าที่: {$assignedUser->name}\n"
+                . "🏥 หน่วยงาน: {$agencyName}\n"
+                . "🗓️ วันที่เข้าเวร: {$dateDisplay}\n"
+                . "⏰ กะเวลา: {$shiftLabel}\n"
+                . "📝 ภารกิจ: " . ($validated['handover_notes'] ?: 'เฝ้าระวังความมั่นคงปลอดภัยศูนย์ SOC ตามตารางเวร');
+
+            app(MessagingNotificationService::class)->notifyUser($assignedUser, $msg, 'notify_shift_assigned');
+
+            if (! empty($validated['backup_user_id'])) {
+                $backupUser = User::find($validated['backup_user_id']);
+                if ($backupUser) {
+                    $backupMsg = "📅 แจ้งเตือนมอบหมายเวรสำรอง (Backup Watch)\n"
+                        . "━━━━━━━━━━━━━━━━━━\n"
+                        . "👤 ผู้เข้าเวรสำรอง: {$backupUser->name}\n"
+                        . "🤝 คู่เวรหลัก: {$assignedUser->name}\n"
+                        . "🗓️ วันที่เข้าเวร: {$dateDisplay} ({$shiftLabel})";
+                    app(MessagingNotificationService::class)->notifyUser($backupUser, $backupMsg, 'notify_shift_assigned');
+                }
+            }
+        } catch (\Throwable $e) {
+            // Do not block UI if notification fails
+        }
 
         return back()->with('success', "มอบหมายเวรให้ {$assignedUser->name} ในวันที่ {$validated['shift_date']} เรียบร้อยแล้ว");
     }
@@ -459,6 +489,24 @@ class SocScheduleController extends Controller
             'completed_at' => Carbon::now(),
             'handover_notes' => $validated['handover_notes'] ?? $schedule->handover_notes,
         ]);
+
+        // Broadcast SOC shift report via Telegram & LINE OA
+        try {
+            $shiftLabel = SocShiftSchedule::$shiftTypeLabels[$schedule->shift_type] ?? $schedule->shift_type;
+            $sevLabel = strtoupper($validated['severity']);
+            $eventType = in_array($validated['severity'], ['high', 'critical']) ? 'notify_incident_alert' : 'notify_soc_report';
+            $reportMsg = "📋 รายงานผลเฝ้าระวังศูนย์ SOC (#{$topic->id})\n"
+                . "━━━━━━━━━━━━━━━━━━\n"
+                . "📌 หัวข้อ: {$validated['title']}\n"
+                . "⚠️ ระดับความสำคัญ: {$sevLabel}\n"
+                . "🖥️ ระบบที่เฝ้าระวัง: {$validated['system_affected']}\n"
+                . "👤 ผู้รายงาน: {$user->name} ({$schedule->agency_name})\n"
+                . "🗓️ ประจำเวร: {$schedule->shift_date->format('d/m/Y')} ({$shiftLabel})";
+
+            app(MessagingNotificationService::class)->broadcastToLinkedUsers($reportMsg, $eventType);
+        } catch (\Throwable $e) {
+            // Do not block UI if notification fails
+        }
 
         return back()->with('success', "บันทึกรายงานผลการเฝ้าระวังศูนย์ SOC และอัปเดตสถานะตารางเวรเรียบร้อยแล้ว (รหัสรายงาน #{$topic->id})");
     }

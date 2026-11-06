@@ -11,6 +11,7 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
     const [selectedRole, setSelectedRole] = useState(filters.role || '');
     const [selectedAgency, setSelectedAgency] = useState(filters.agency_code || '');
     const [selectedStatus, setSelectedStatus] = useState(filters.status || '');
+    const [selectedChannel, setSelectedChannel] = useState(filters.channel || '');
 
     // Modal state
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -28,6 +29,8 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
         agency_code: defaultAgencyCode,
         position: '',
         phone: '',
+        telegram_chat_id: '',
+        line_user_id: '',
         is_active: true,
     });
 
@@ -37,6 +40,7 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
             role: customFilters.role !== undefined ? customFilters.role : selectedRole,
             agency_code: customFilters.agency_code !== undefined ? customFilters.agency_code : selectedAgency,
             status: customFilters.status !== undefined ? customFilters.status : selectedStatus,
+            channel: customFilters.channel !== undefined ? customFilters.channel : selectedChannel,
         };
 
         // Remove empty keys
@@ -60,6 +64,7 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
         setSelectedRole('');
         setSelectedAgency('');
         setSelectedStatus('');
+        setSelectedChannel('');
         router.get('/users');
     };
 
@@ -75,6 +80,8 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
             agency_code: defaultAgencyCode,
             position: '',
             phone: '',
+            telegram_chat_id: '',
+            line_user_id: '',
             is_active: true,
         });
         setIsAddModalOpen(true);
@@ -92,6 +99,8 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
             agency_code: user.hospcode || user.agency_code || defaultAgencyCode,
             position: user.position || '',
             phone: user.phone || '',
+            telegram_chat_id: user.telegram_chat_id || '',
+            line_user_id: user.line_user_id || '',
             is_active: Boolean(user.is_active),
         });
     };
@@ -176,7 +185,7 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
                 </div>
 
                 {/* STATS OVERVIEW CARDS */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
                     <div className="bg-white border border-[#D3DAE6] rounded-lg p-3.5 shadow-2xs flex items-center justify-between">
                         <div>
                             <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">ผู้ใช้งานทั้งหมด</div>
@@ -199,6 +208,23 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
                         <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                    </div>
+
+                    <div className="bg-white border border-[#D3DAE6] rounded-lg p-3.5 shadow-2xs flex items-center justify-between">
+                        <div>
+                            <div className="text-[11px] font-semibold text-[#0088cc] uppercase tracking-wider">Telegram / LINE</div>
+                            <div className="text-lg font-bold text-slate-800 mt-1 flex items-center gap-2">
+                                <span className="text-[#0088cc]" title="เชื่อมต่อ Telegram แล้ว">✈️ {stats.telegram_linked || 0}</span>
+                                <span className="text-slate-300">|</span>
+                                <span className="text-[#06C755]" title="เชื่อมต่อ LINE OA แล้ว">💬 {stats.line_linked || 0}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">ผูกแจ้งเตือนแล้ว</div>
+                        </div>
+                        <div className="w-9 h-9 rounded-lg bg-sky-50 text-[#0088cc] flex items-center justify-center">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                             </svg>
                         </div>
                     </div>
@@ -245,7 +271,7 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
 
                 {/* FILTERS & SEARCH TOOLBAR */}
                 <div className="bg-white border border-[#D3DAE6] rounded-lg p-4 shadow-2xs space-y-3">
-                    <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                         {/* Search Input */}
                         <div className="lg:col-span-2 relative">
                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -300,6 +326,24 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
                             </select>
                         </div>
 
+                        {/* Channel Connection Filter */}
+                        <div>
+                            <select
+                                value={selectedChannel}
+                                onChange={(e) => {
+                                    setSelectedChannel(e.target.value);
+                                    handleFilter({ channel: e.target.value });
+                                }}
+                                className="w-full py-2 px-3 text-xs bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#006BB4]"
+                            >
+                                <option value="">-- สถานะ Telegram / LINE --</option>
+                                <option value="any">✅ เชื่อมต่อแล้ว (อย่างน้อย 1 ช่องทาง)</option>
+                                <option value="telegram">✈️ เชื่อมต่อ Telegram แล้ว</option>
+                                <option value="line">💬 เชื่อมต่อ LINE OA แล้ว</option>
+                                <option value="unlinked">⚪ ยังไม่เชื่อมต่อเลย</option>
+                            </select>
+                        </div>
+
                         {/* Buttons */}
                         <div className="flex items-center gap-2">
                             <button
@@ -342,6 +386,7 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
                                     <th className="p-3.5">หน่วยงาน / โรงพยาบาลสังกัด</th>
                                     <th className="p-3.5">สิทธิ์ (Role)</th>
                                     <th className="p-3.5">ข้อมูลติดต่อ</th>
+                                    <th className="p-3.5">การเชื่อมต่อ Telegram / LINE OA</th>
                                     <th className="p-3.5">สถานะ</th>
                                     <th className="p-3.5">ความปลอดภัย 2FA</th>
                                     <th className="p-3.5 text-right">การจัดการ</th>
@@ -350,7 +395,7 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
                             <tbody className="divide-y divide-slate-200">
                                 {users.data.length === 0 ? (
                                     <tr>
-                                        <td colSpan="8" className="p-8 text-center text-slate-400">
+                                        <td colSpan="9" className="p-8 text-center text-slate-400">
                                             ไม่พบข้อมูลผู้ใช้งานที่ตรงกับเงื่อนไขการค้นหา
                                         </td>
                                     </tr>
@@ -397,6 +442,53 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
                                             <td className="p-3.5">
                                                 <div className="text-slate-600">{user.email || '-'}</div>
                                                 <div className="text-[11px] text-slate-400">{user.phone || '-'}</div>
+                                            </td>
+
+                                            {/* Telegram & LINE OA Connection Status */}
+                                            <td className="p-3.5 whitespace-nowrap">
+                                                <div className="flex flex-col gap-1.5">
+                                                    {/* Telegram Status */}
+                                                    <div className="flex items-center gap-1.5">
+                                                        {user.telegram_chat_id ? (
+                                                            <span
+                                                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-[#0088cc] border border-sky-200"
+                                                                title={`เชื่อมต่อ Telegram แล้ว • Chat ID: ${user.telegram_chat_id}${user.telegram_linked_at ? ` (${user.telegram_linked_at})` : ''}`}
+                                                            >
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-[#0088cc]" />
+                                                                <span>Telegram: เชื่อมต่อแล้ว</span>
+                                                                <span className="font-mono text-[9px] text-sky-700 bg-sky-100/80 px-1 rounded">
+                                                                    {user.telegram_username ? `@${user.telegram_username}` : user.telegram_chat_id}
+                                                                </span>
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-400 border border-slate-200">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                                                                <span>Telegram: ยังไม่เชื่อมต่อ</span>
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* LINE OA Status */}
+                                                    <div className="flex items-center gap-1.5">
+                                                        {user.line_user_id ? (
+                                                            <span
+                                                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-[#06C755] border border-emerald-200"
+                                                                title={`เชื่อมต่อ LINE OA แล้ว • LINE ID: ${user.line_user_id}${user.line_linked_at ? ` (${user.line_linked_at})` : ''}`}
+                                                            >
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-[#06C755]" />
+                                                                <span>LINE OA: เชื่อมต่อแล้ว</span>
+                                                                <span className="font-mono text-[9px] text-emerald-800 bg-emerald-100/80 px-1 rounded">
+                                                                    {user.line_display_name || `${user.line_user_id.substring(0, 8)}...`}
+                                                                </span>
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-400 border border-slate-200">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                                                                <span>LINE OA: ยังไม่เชื่อมต่อ</span>
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </td>
 
                                             {/* Status & Toggle */}
@@ -660,6 +752,34 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
                                 </div>
                             </div>
 
+                            {/* Telegram & LINE IDs */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                        ✈️ Telegram Chat ID (ถ้ามี)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={data.telegram_chat_id}
+                                        onChange={(e) => setData('telegram_chat_id', e.target.value)}
+                                        placeholder="เช่น 123456789"
+                                        className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                        💬 LINE User ID (ถ้ามี)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={data.line_user_id}
+                                        onChange={(e) => setData('line_user_id', e.target.value)}
+                                        placeholder="เช่น U4af4980629..."
+                                        className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#06C755]"
+                                    />
+                                </div>
+                            </div>
+
                             {/* Active Status */}
                             <div className="pt-2">
                                 <label className="flex items-center gap-2 cursor-pointer">
@@ -838,6 +958,34 @@ export default function Index({ users, filters, agencies = [], hospcodes = [], s
                                         className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#006BB4]"
                                     />
                                     {formErrors.password && <p className="mt-1 text-xs text-rose-600">{formErrors.password}</p>}
+                                </div>
+                            </div>
+
+                            {/* Telegram & LINE IDs */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                        ✈️ Telegram Chat ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={data.telegram_chat_id}
+                                        onChange={(e) => setData('telegram_chat_id', e.target.value)}
+                                        placeholder="เช่น 123456789"
+                                        className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                        💬 LINE User ID
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={data.line_user_id}
+                                        onChange={(e) => setData('line_user_id', e.target.value)}
+                                        placeholder="เช่น U4af4980629..."
+                                        className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#06C755]"
+                                    />
                                 </div>
                             </div>
 

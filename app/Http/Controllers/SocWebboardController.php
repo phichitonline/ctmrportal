@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\SocComment;
 use App\Models\SocTopic;
 use App\Models\User;
+use App\Services\MessagingNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -195,6 +196,26 @@ class SocWebboardController extends Controller
         $validated['status'] = 'open';
 
         $topic = SocTopic::create($validated);
+
+        // Send Telegram & LINE notifications for critical incidents or SOC reports
+        try {
+            $isCritical = $validated['category'] === 'incident_alert' || in_array($validated['severity'], ['high', 'critical']);
+            if ($isCritical || $validated['category'] === 'soc_report') {
+                $eventType = $isCritical ? 'notify_incident_alert' : 'notify_soc_report';
+                $headerIcon = $isCritical ? '🚨 แจ้งเตือนเหตุภัยคุกคาม SOC ด่วน!' : '📋 รายงานการปฏิบัติงานศูนย์ SOC';
+                $sevLabel = strtoupper($validated['severity']);
+                $msg = "{$headerIcon}\n"
+                    . "━━━━━━━━━━━━━━━━━━\n"
+                    . "📌 เรื่อง: {$topic->title}\n"
+                    . "⚠️ ระดับความรุนแรง: {$sevLabel}\n"
+                    . "🏥 หน่วยงาน: {$topic->agency_name}\n"
+                    . "👤 ผู้แจ้ง: {$user->name}";
+
+                app(MessagingNotificationService::class)->broadcastToLinkedUsers($msg, $eventType);
+            }
+        } catch (\Throwable $e) {
+            // Do not interrupt webboard creation if notification fails
+        }
 
         return redirect()->route('webboard.show', $topic->id)->with('success', 'บันทึกกระทู้ / รายงานการปฏิบัติงานเรียบร้อยแล้ว');
     }

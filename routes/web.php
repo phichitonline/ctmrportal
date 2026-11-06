@@ -4,6 +4,7 @@ use App\Http\Controllers\AboutController;
 use App\Http\Controllers\AgencyDocumentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ProfileNotificationController;
 use App\Http\Controllers\SocScheduleController;
 use App\Http\Controllers\SocWebboardController;
 use App\Http\Controllers\TeamController;
@@ -26,6 +27,10 @@ Route::middleware('guest')->group(function () {
     // MOPH Provider ID Callback
     Route::match(['get', 'post'], '/auth/moph/callback', [SSOLoginController::class, 'handle'])->name('auth.moph.callback');
 });
+
+// Public Bot Webhooks (Telegram & LINE OA)
+Route::post('/webhooks/telegram', [ProfileNotificationController::class, 'handleTelegramWebhook'])->name('webhooks.telegram');
+Route::post('/webhooks/line', [ProfileNotificationController::class, 'handleLineWebhook'])->name('webhooks.line');
 
 // Authenticated routes
 Route::middleware('auth')->group(function () {
@@ -86,6 +91,16 @@ Route::middleware('auth')->group(function () {
     Route::post('/security/two-factor/confirm', [TwoFactorAuthController::class, 'confirm'])->name('two-factor.confirm');
     Route::delete('/security/two-factor', [TwoFactorAuthController::class, 'disable'])->name('two-factor.disable');
     Route::post('/security/two-factor/recovery-codes', [TwoFactorAuthController::class, 'regenerateRecoveryCodes'])->name('two-factor.recovery-codes');
+
+    // User Profile & Telegram / LINE OA Notification Settings
+    Route::prefix('profile/notifications')->name('profile.notifications.')->group(function () {
+        Route::get('/', [ProfileNotificationController::class, 'show'])->name('show');
+        Route::put('/', [ProfileNotificationController::class, 'update'])->name('update');
+        Route::post('/regenerate-token', [ProfileNotificationController::class, 'regenerateToken'])->name('regenerate-token');
+        Route::post('/sync-telegram', [ProfileNotificationController::class, 'syncTelegram'])->name('sync-telegram');
+        Route::delete('/unlink/{channel}', [ProfileNotificationController::class, 'unlinkChannel'])->name('unlink');
+        Route::post('/test/{channel}', [ProfileNotificationController::class, 'sendTestNotification'])->name('test');
+    });
 
     // Admin-only User Management
     Route::middleware('admin')->group(function () {

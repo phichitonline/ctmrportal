@@ -45,4 +45,15 @@ return [
         'shared_secret' => env('SSO_SHARED_SECRET', ''),
     ],
 
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN', ''),
+        'bot_username' => env('TELEGRAM_BOT_USERNAME', ''),
+    ],
+
+    'line' => [
+        'channel_access_token' => env('LINE_CHANNEL_ACCESS_TOKEN', ''),
+        'channel_secret' => env('LINE_CHANNEL_SECRET', ''),
+        'bot_basic_id' => env('LINE_BOT_BASIC_ID', ''),
+    ],
+
 ];
