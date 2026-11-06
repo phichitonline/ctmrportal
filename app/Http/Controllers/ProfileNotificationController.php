@@ -352,8 +352,14 @@ class ProfileNotificationController extends Controller
             . "🏥 หน่วยงาน: " . ($user->hname_th ?: $user->agency_name)
         );
 
+        $successMessage = "เข้าสู่ระบบด้วย Telegram สำเร็จ! บันทึก Chat ID: {$chatId} (@{$username}) เข้ากับบัญชี {$user->name} เรียบร้อยแล้ว";
+
+        if ($request->query('from') === 'profile') {
+            return redirect('/profile/notifications')->with('success', $successMessage);
+        }
+
         return redirect("/connect-notification?token={$token}")
-            ->with('success', "เข้าสู่ระบบด้วย Telegram สำเร็จ! บันทึก Chat ID: {$chatId} (@{$username}) เข้ากับบัญชี {$user->name} เรียบร้อยแล้ว");
+            ->with('success', $successMessage);
     }
 
     /**

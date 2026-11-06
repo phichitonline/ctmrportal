@@ -336,7 +336,7 @@ export default function ConnectChannel({ token = '', matchedUser = null, tokenNo
                                         </div>
                                     )}
 
-                                    {/* Option A: Telegram Login Widget */}
+                                    {/* Option A: Telegram Login Widget & Bot Auto-Sync */}
                                     <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
                                         <div className="font-bold text-slate-800">
                                             วิธีที่ 1: ล็อกอินผ่านปุ่ม Telegram Login หรือผ่านแชทบอท
@@ -354,7 +354,7 @@ export default function ConnectChannel({ token = '', matchedUser = null, tokenNo
                                                     href={telegramDeepLink}
                                                     target="_blank"
                                                     rel="noreferrer"
-                                                    className="px-3 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white font-semibold rounded-lg transition inline-flex items-center gap-1.5"
+                                                    className="px-3.5 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white font-semibold rounded-lg shadow-xs transition inline-flex items-center gap-1.5"
                                                 >
                                                     <span>1. เปิดบอท @{botUsernameClean}</span>
                                                 </a>
@@ -364,7 +364,7 @@ export default function ConnectChannel({ token = '', matchedUser = null, tokenNo
                                                 type="button"
                                                 onClick={handleSyncTelegram}
                                                 disabled={syncingTelegram}
-                                                className="px-3 py-2 bg-sky-100 hover:bg-sky-200 text-[#006BB4] font-bold rounded-lg transition cursor-pointer disabled:opacity-50"
+                                                className="px-3.5 py-2 bg-sky-100 hover:bg-sky-200 text-[#006BB4] border border-sky-300 font-bold rounded-lg transition cursor-pointer disabled:opacity-50"
                                             >
                                                 {syncingTelegram ? '⏳ กำลังดึงข้อมูล...' : '2. 🔄 ดึงรหัส Chat ID จากบอทอัตโนมัติ'}
                                             </button>
@@ -465,16 +465,15 @@ export default function ConnectChannel({ token = '', matchedUser = null, tokenNo
                                         </p>
 
                                         <div className="flex flex-wrap items-center gap-2 pt-1">
-                                            <button
-                                                type="button"
-                                                onClick={handleLiffLogin}
+                                            <a
+                                                href={`/connect-notification/line/redirect?token=${encodeURIComponent(matchedUser.notification_link_token)}`}
                                                 className="w-full sm:w-auto px-4 py-2.5 bg-[#06C755] hover:bg-[#05a847] text-white font-bold rounded-lg shadow-xs transition cursor-pointer flex items-center justify-center gap-2"
                                             >
                                                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                                                     <path d="M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314" />
                                                 </svg>
                                                 <span>เข้าสู่ระบบด้วย LINE เพื่อผูกบัญชีอัตโนมัติ</span>
-                                            </button>
+                                            </a>
 
                                             {botConfig?.line_bot_basic_id && (
                                                 <a

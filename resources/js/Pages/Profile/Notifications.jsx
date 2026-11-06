@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, router, useForm, usePage } from '@inertiajs/react';
 import CtmrLayout from '../../Layouts/CtmrLayout';
 
@@ -10,6 +10,7 @@ export default function Notifications({ userProfile, botConfig }) {
     const [testingChannel, setTestingChannel] = useState(null);
     const [regeneratingToken, setRegeneratingToken] = useState(false);
     const [showWebhookGuide, setShowWebhookGuide] = useState(false);
+    const telegramWidgetRef = useRef(null);
 
     const prefs = userProfile.notification_preferences || {};
 
@@ -124,6 +125,25 @@ export default function Notifications({ userProfile, botConfig }) {
     const telegramDeepLink = telegramBotClean
         ? `https://t.me/${telegramBotClean}?start=${userProfile.notification_link_token}`
         : null;
+
+    // Mount Official Telegram Login Widget inside Profile Notifications page
+    useEffect(() => {
+        if (!telegramWidgetRef.current || !telegramBotClean || !userProfile.notification_link_token) return;
+
+        telegramWidgetRef.current.innerHTML = '';
+        const script = document.createElement('script');
+        script.src = 'https://telegram.org/js/telegram-widget.js?22';
+        script.async = true;
+        script.setAttribute('data-telegram-login', telegramBotClean);
+        script.setAttribute('data-size', 'large');
+        script.setAttribute('data-radius', '8');
+        script.setAttribute(
+            'data-auth-url',
+            `${botConfig.telegram_callback_url}?token=${encodeURIComponent(userProfile.notification_link_token)}&from=profile`
+        );
+        script.setAttribute('data-request-access', 'write');
+        telegramWidgetRef.current.appendChild(script);
+    }, [telegramBotClean, userProfile.notification_link_token, botConfig?.telegram_callback_url]);
 
     return (
         <CtmrLayout title="โปรไฟล์ & แจ้งเตือน Telegram / LINE" activeNav="profile-notifications">
@@ -477,38 +497,47 @@ LINE_BOT_BASIC_ID="@phichitsoc"`}
                                         </div>
                                     )}
 
-                                    {/* Quick Action Buttons for Telegram */}
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        {telegramDeepLink && (
-                                            <a
-                                                href={telegramDeepLink}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="px-3 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg transition flex items-center gap-1.5 shadow-2xs"
-                                            >
-                                                <span>✈️ เปิดแอป Telegram Bot</span>
-                                            </a>
-                                        )}
+                                    {/* Official Telegram Login Widget & Quick Action Buttons */}
+                                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                                        <div className="text-xs font-bold text-slate-800">
+                                            ล็อกอินผ่านปุ่ม Telegram Login หรือผ่านแชทบอท (อ้างอิงรหัส {userProfile.notification_link_token})
+                                        </div>
 
-                                        <button
-                                            type="button"
-                                            onClick={handleSyncTelegram}
-                                            disabled={syncingTelegram}
-                                            className="px-3 py-2 bg-sky-50 hover:bg-sky-100 text-[#006BB4] border border-sky-200 text-xs font-semibold rounded-lg transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                                        >
-                                            <span>{syncingTelegram ? '⏳ กำลังตรวจสอบ...' : '🔄 ซิงค์ข้อมูลจาก Telegram Bot'}</span>
-                                        </button>
+                                        {/* Telegram Login Widget Button (Log in as ...) */}
+                                        <div ref={telegramWidgetRef} className="min-h-[40px] flex items-center" />
 
-                                        {isTelegramLinked && (
+                                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                                            {telegramDeepLink && (
+                                                <a
+                                                    href={telegramDeepLink}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="px-3 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg transition flex items-center gap-1.5 shadow-2xs"
+                                                >
+                                                    <span>1. ✈️ เปิดบอท @{telegramBotClean}</span>
+                                                </a>
+                                            )}
+
                                             <button
                                                 type="button"
-                                                onClick={() => handleTestNotification('telegram')}
-                                                disabled={testingChannel === 'telegram'}
-                                                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5 ml-auto"
+                                                onClick={handleSyncTelegram}
+                                                disabled={syncingTelegram}
+                                                className="px-3 py-2 bg-sky-50 hover:bg-sky-100 text-[#006BB4] border border-sky-200 text-xs font-semibold rounded-lg transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                                             >
-                                                <span>{testingChannel === 'telegram' ? 'กำลังส่ง...' : '🔔 ทดสอบส่งข้อความ'}</span>
+                                                <span>{syncingTelegram ? '⏳ กำลังตรวจสอบ...' : '2. 🔄 ดึงรหัส Chat ID จากบอทอัตโนมัติ'}</span>
                                             </button>
-                                        )}
+
+                                            {isTelegramLinked && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleTestNotification('telegram')}
+                                                    disabled={testingChannel === 'telegram'}
+                                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5 ml-auto"
+                                                >
+                                                    <span>{testingChannel === 'telegram' ? 'กำลังส่ง...' : '🔔 ทดสอบส่งข้อความ'}</span>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Manual Input Fields */}
