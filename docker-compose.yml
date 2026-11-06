@@ -12,6 +12,8 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "${APP_PORT:-8000}:8000"
+    env_file:
+      - .env
     environment:
       - APP_ENV=${APP_ENV:-production}
       - APP_KEY=${APP_KEY}
@@ -25,9 +27,19 @@ services:
       - DB_DATABASE=${DB_DATABASE:-laravel}
       - DB_USERNAME=${DB_USERNAME:-sail}
       - DB_PASSWORD=${DB_PASSWORD:-password}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-PhichitSocBot}
+      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
+      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
+      - LINE_BOT_BASIC_ID=${LINE_BOT_BASIC_ID:-@phichitsoc}
+      - WAZUH_API_URL=${WAZUH_API_URL}
+      - WAZUH_API_USER=${WAZUH_API_USER}
+      - WAZUH_API_PASSWORD=${WAZUH_API_PASSWORD}
+      - WAZUH_VERIFY_SSL=${WAZUH_VERIFY_SSL:-false}
       # depends_on:
       # - db
     volumes:
+      - ./.env:/var/www/html/.env
       - ./storage/app/public:/var/www/html/storage/app/public
     networks:
       - ctmr-network
