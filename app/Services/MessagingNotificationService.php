@@ -20,6 +20,12 @@ class MessagingNotificationService
 
     protected string $lineBotBasicId;
 
+    protected string $lineLoginChannelId;
+
+    protected string $lineLoginChannelSecret;
+
+    protected string $lineLiffId;
+
     public function __construct()
     {
         $this->telegramBotToken = trim((string) config('services.telegram.bot_token', ''));
@@ -27,6 +33,9 @@ class MessagingNotificationService
         $this->lineAccessToken = trim((string) config('services.line.channel_access_token', ''));
         $this->lineChannelSecret = trim((string) config('services.line.channel_secret', ''));
         $this->lineBotBasicId = trim((string) config('services.line.bot_basic_id', ''));
+        $this->lineLoginChannelId = trim((string) config('services.line.login_channel_id', ''));
+        $this->lineLoginChannelSecret = trim((string) config('services.line.login_channel_secret', ''));
+        $this->lineLiffId = trim((string) config('services.line.liff_id', ''));
     }
 
     public function isTelegramConfigured(): bool
@@ -37,6 +46,129 @@ class MessagingNotificationService
     public function isLineConfigured(): bool
     {
         return ! empty($this->lineAccessToken);
+    }
+
+    public function isLineLoginConfigured(): bool
+    {
+        return ! empty($this->lineLoginChannelId) && ! empty($this->lineLoginChannelSecret);
+    }
+
+    /**
+     * Build LINE Login OAuth 2.0 Authorization URL referencing the user's SOC-XXXXXX token in `state`.
+     */
+    public function getLineLoginAuthorizeUrl(string $linkToken, string $redirectUri): ?string
+    {
+        if (! $this->isLineLoginConfigured()) {
+            return null;
+        }
+
+        $params = http_build_query([
+            'response_type' => 'code',
+            'client_id' => $this->lineLoginChannelId,
+            'redirect_uri' => $redirectUri,
+            'state' => $linkToken,
+            'scope' => 'profile openid',
+            'bot_prompt' => 'normal',
+        ]);
+
+        return "https://access.line.me/oauth2/v2.1/authorize?{$params}";
+    }
+
+    /**
+     * Exchange LINE Login authorization code for LINE user profile (userId & displayName).
+     */
+    public function exchangeLineLoginCode(string $code, string $redirectUri): array
+    {
+        if (! $this->isLineLoginConfigured()) {
+            return [
+                'success' => false,
+                'message' => 'ยังไม่ได้ตั้งค่า LINE_LOGIN_CHANNEL_ID และ LINE_LOGIN_CHANNEL_SECRET ในไฟล์ .env',
+            ];
+        }
+
+        try {
+            $tokenResp = Http::asForm()
+                ->timeout(10)
+                ->post('https://api.line.me/oauth2/v2.1/token', [
+                    'grant_type' => 'authorization_code',
+                    'code' => $code,
+                    'redirect_uri' => $redirectUri,
+                    'client_id' => $this->lineLoginChannelId,
+                    'client_secret' => $this->lineLoginChannelSecret,
+                ]);
+
+            if (! $tokenResp->successful()) {
+                $err = $tokenResp->json('error_description') ?? $tokenResp->body();
+
+                return [
+                    'success' => false,
+                    'message' => "ไม่สามารถขอ Access Token จาก LINE Login ได้: {$err}",
+                ];
+            }
+
+            $accessToken = $tokenResp->json('access_token');
+            $profileResp = Http::withToken($accessToken)
+                ->timeout(10)
+                ->get('https://api.line.me/v2/profile');
+
+            if (! $profileResp->successful()) {
+                return [
+                    'success' => false,
+                    'message' => 'ไม่สามารถดึงข้อมูลโปรไฟล์จาก LINE Login ได้',
+                ];
+            }
+
+            $profile = $profileResp->json();
+
+            return [
+                'success' => true,
+                'userId' => $profile['userId'] ?? '',
+                'displayName' => $profile['displayName'] ?? 'LINE User',
+                'pictureUrl' => $profile['pictureUrl'] ?? null,
+            ];
+        } catch (Exception $e) {
+            Log::error('LINE Login OAuth Error: ' . $e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'เกิดข้อผิดพลาดในการเชื่อมต่อ LINE Login: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Verify Telegram Login Widget callback hash.
+     */
+    public function verifyTelegramWidgetAuth(array $authData): bool
+    {
+        if (empty($authData['id'])) {
+            return false;
+        }
+
+        // If bot token is not set, allow simulated testing mode
+        if (! $this->isTelegramConfigured()) {
+            return true;
+        }
+
+        $checkHash = $authData['hash'] ?? '';
+        if (empty($checkHash)) {
+            return false;
+        }
+
+        $allowedKeys = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date'];
+        $dataCheckArr = [];
+        foreach ($allowedKeys as $key) {
+            if (isset($authData[$key]) && $authData[$key] !== '') {
+                $dataCheckArr[] = $key . '=' . $authData[$key];
+            }
+        }
+        sort($dataCheckArr);
+        $dataCheckString = implode("\n", $dataCheckArr);
+
+        $secretKey = hash('sha256', $this->telegramBotToken, true);
+        $hash = hash_hmac('sha256', $dataCheckString, $secretKey);
+
+        return hash_equals($hash, $checkHash);
     }
 
     /**
@@ -230,6 +362,15 @@ class MessagingNotificationService
                 ->get("https://api.telegram.org/bot{$this->telegramBotToken}/getUpdates", [
                     'limit' => 50,
                 ]);
+
+            // If a webhook was previously set on Telegram, clear it automatically so polling works without webhook
+            if ($response->status() === 409) {
+                Http::timeout(6)->post("https://api.telegram.org/bot{$this->telegramBotToken}/deleteWebhook");
+                $response = Http::timeout(10)
+                    ->get("https://api.telegram.org/bot{$this->telegramBotToken}/getUpdates", [
+                        'limit' => 50,
+                    ]);
+            }
 
             if (! $response->successful() || ! $response->json('ok')) {
                 $desc = $response->json('description') ?? 'ไม่สามารถดึงข้อมูลจาก Telegram Bot ได้';

@@ -20,8 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->validateCsrfTokens(except: [
             'auth/moph/callback',
-            'webhooks/telegram',
-            'webhooks/line',
+            'connect-notification/telegram/callback',
+            'connect-notification/line/callback',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -28,9 +28,16 @@ Route::middleware('guest')->group(function () {
     Route::match(['get', 'post'], '/auth/moph/callback', [SSOLoginController::class, 'handle'])->name('auth.moph.callback');
 });
 
-// Public Bot Webhooks (Telegram & LINE OA)
-Route::post('/webhooks/telegram', [ProfileNotificationController::class, 'handleTelegramWebhook'])->name('webhooks.telegram');
-Route::post('/webhooks/line', [ProfileNotificationController::class, 'handleLineWebhook'])->name('webhooks.line');
+// Public / Token-Based Channel Login & Registration Page (Telegram & LINE OA without Webhooks)
+Route::prefix('connect-notification')->name('connect.')->group(function () {
+    Route::get('/', [ProfileNotificationController::class, 'showConnectPage'])->name('page');
+    Route::post('/bind', [ProfileNotificationController::class, 'bindByToken'])->name('bind');
+    Route::post('/sync-telegram', [ProfileNotificationController::class, 'syncTelegramByToken'])->name('sync-telegram');
+    Route::get('/line/redirect', [ProfileNotificationController::class, 'redirectToLineLogin'])->name('line.redirect');
+    Route::get('/line/callback', [ProfileNotificationController::class, 'handleLineLoginCallback'])->name('line.callback');
+    Route::match(['get', 'post'], '/telegram/callback', [ProfileNotificationController::class, 'handleTelegramLoginCallback'])->name('telegram.callback');
+    Route::get('/{token}', [ProfileNotificationController::class, 'showConnectPage'])->name('token');
+});
 
 // Authenticated routes
 Route::middleware('auth')->group(function () {

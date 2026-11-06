@@ -5,11 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Services\MessagingNotificationService;
 use Carbon\Carbon;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -39,6 +37,7 @@ class ProfileNotificationController extends Controller
 
         $telegramBotUsername = ltrim(trim((string) config('services.telegram.bot_username', '')), '@');
         $lineBotBasicId = trim((string) config('services.line.bot_basic_id', ''));
+        $lineLiffId = trim((string) config('services.line.liff_id', ''));
 
         return Inertia::render('Profile/Notifications', [
             'userProfile' => [
@@ -58,24 +57,307 @@ class ProfileNotificationController extends Controller
                 'line_display_name' => $user->line_display_name ?? '',
                 'line_linked_at' => $user->line_linked_at?->format('d/m/Y H:i น.'),
                 'notification_link_token' => $user->notification_link_token,
-                'preferences' => $user->getNotificationPrefs(),
+                'notification_preferences' => $user->getNotificationPrefs(),
             ],
             'botConfig' => [
                 'telegram_configured' => $this->messagingService->isTelegramConfigured(),
-                'telegram_bot_username' => $telegramBotUsername ?: 'CTMRPhichitSOCBot',
+                'telegram_bot_username' => $telegramBotUsername ?: 'PhichitSocBot',
                 'telegram_deep_link' => $telegramBotUsername
                     ? "https://t.me/{$telegramBotUsername}?start={$user->notification_link_token}"
                     : null,
                 'line_configured' => $this->messagingService->isLineConfigured(),
-                'line_bot_basic_id' => $lineBotBasicId ?: '@ctmr-soc',
-                'telegram_webhook_url' => url('/webhooks/telegram'),
-                'line_webhook_url' => url('/webhooks/line'),
+                'line_login_configured' => $this->messagingService->isLineLoginConfigured(),
+                'line_bot_basic_id' => $lineBotBasicId ?: '@phichitsoc',
+                'line_liff_id' => $lineLiffId,
+                'connect_page_url' => url('/connect-notification?token=' . $user->notification_link_token),
+                'line_callback_url' => url('/connect-notification/line/callback'),
+                'telegram_callback_url' => url('/connect-notification/telegram/callback'),
             ],
         ]);
     }
 
     /**
-     * Save or update user's Telegram Chat ID, LINE User ID, and notification preferences.
+     * Show the public/standalone Login & Channel Registration Page referencing `notification_link_token` (SOC-XXXXXX).
+     */
+    public function showConnectPage(Request $request, ?string $token = null): Response
+    {
+        $rawToken = $token ?: $request->query('token', '');
+        $cleanToken = strtoupper(trim((string) $rawToken));
+
+        // If user is logged in and didn't provide a token in URL, prefill their own token
+        if ($cleanToken === '' && Auth::check()) {
+            /** @var User $authUser */
+            $authUser = Auth::user();
+            if (empty($authUser->notification_link_token)) {
+                $authUser->update(['notification_link_token' => $this->generateUniqueLinkToken()]);
+                $authUser->refresh();
+            }
+            $cleanToken = $authUser->notification_link_token;
+        }
+
+        $matchedUser = null;
+        if ($cleanToken !== '') {
+            $user = User::where('notification_link_token', $cleanToken)->first();
+            if ($user) {
+                $matchedUser = [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'provider_id' => $user->provider_id,
+                    'agency_code' => $user->hospcode ?: $user->agency_code,
+                    'agency_name' => $user->hname_th ?: $user->agency_name,
+                    'position' => $user->position ?: 'เจ้าหน้าที่ศูนย์เฝ้าระวัง SOC',
+                    'notification_link_token' => $user->notification_link_token,
+                    'has_telegram' => ! empty($user->telegram_chat_id),
+                    'telegram_chat_id' => $user->telegram_chat_id ?? '',
+                    'telegram_username' => $user->telegram_username ?? '',
+                    'telegram_linked_at' => $user->telegram_linked_at?->format('d/m/Y H:i น.'),
+                    'has_line' => ! empty($user->line_user_id),
+                    'line_user_id' => $user->line_user_id ?? '',
+                    'line_display_name' => $user->line_display_name ?? '',
+                    'line_linked_at' => $user->line_linked_at?->format('d/m/Y H:i น.'),
+                ];
+            }
+        }
+
+        $telegramBotUsername = ltrim(trim((string) config('services.telegram.bot_username', '')), '@');
+        $lineBotBasicId = trim((string) config('services.line.bot_basic_id', ''));
+        $lineLiffId = trim((string) config('services.line.liff_id', ''));
+
+        return Inertia::render('Profile/ConnectChannel', [
+            'token' => $cleanToken,
+            'matchedUser' => $matchedUser,
+            'tokenNotFound' => $cleanToken !== '' && $matchedUser === null,
+            'botConfig' => [
+                'telegram_configured' => $this->messagingService->isTelegramConfigured(),
+                'telegram_bot_username' => $telegramBotUsername ?: 'PhichitSocBot',
+                'line_configured' => $this->messagingService->isLineConfigured(),
+                'line_login_configured' => $this->messagingService->isLineLoginConfigured(),
+                'line_bot_basic_id' => $lineBotBasicId ?: '@phichitsoc',
+                'line_liff_id' => $lineLiffId,
+                'telegram_callback_url' => url('/connect-notification/telegram/callback'),
+                'line_callback_url' => url('/connect-notification/line/callback'),
+            ],
+        ]);
+    }
+
+    /**
+     * Bind Telegram Chat ID and/or LINE User ID via the Connect Page referencing `notification_link_token`.
+     */
+    public function bindByToken(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'token' => ['required', 'string', 'max:30'],
+            'channel' => ['required', 'in:telegram,line,both'],
+            'telegram_chat_id' => ['nullable', 'string', 'max:100'],
+            'telegram_username' => ['nullable', 'string', 'max:100'],
+            'line_user_id' => ['nullable', 'string', 'max:100'],
+            'line_display_name' => ['nullable', 'string', 'max:150'],
+        ], [
+            'token.required' => 'กรุณาระบุรหัสเชื่อมต่อประจำบัญชี (เช่น SOC-123456)',
+        ]);
+
+        $cleanToken = strtoupper(trim($validated['token']));
+        $user = User::where('notification_link_token', $cleanToken)->first();
+
+        if (! $user) {
+            return back()->with('error', "ไม่พบรหัสเชื่อมต่อประจำบัญชี \"{$cleanToken}\" ในระบบ กรุณาตรวจสอบรหัสอีกครั้ง");
+        }
+
+        $channel = $validated['channel'];
+        $agencyName = $user->hname_th ?: $user->agency_name;
+
+        if (in_array($channel, ['telegram', 'both'])) {
+            $tgId = trim((string) ($validated['telegram_chat_id'] ?? ''));
+            $tgUser = ltrim(trim((string) ($validated['telegram_username'] ?? '')), '@');
+
+            if ($tgId === '') {
+                return back()->with('error', 'กรุณาระบุรหัส Telegram Chat ID หรือล็อกอินด้วย Telegram');
+            }
+
+            $user->update([
+                'telegram_chat_id' => $tgId,
+                'telegram_username' => $tgUser ?: $user->telegram_username,
+                'telegram_linked_at' => Carbon::now(),
+            ]);
+
+            $this->messagingService->sendTelegramMessage(
+                $tgId,
+                "✅ ลงทะเบียนเชื่อมต่อ Telegram กับรหัสประจำบัญชี {$cleanToken} สำเร็จ!\n"
+                . "👤 ผู้ใช้งาน: {$user->name} ({$user->provider_id})\n"
+                . "🏥 หน่วยงาน: {$agencyName}"
+            );
+        }
+
+        if (in_array($channel, ['line', 'both'])) {
+            $lineId = trim((string) ($validated['line_user_id'] ?? ''));
+            $lineName = trim((string) ($validated['line_display_name'] ?? ''));
+
+            if ($lineId === '') {
+                return back()->with('error', 'กรุณาระบุรหัส LINE User ID หรือล็อกอินด้วย LINE');
+            }
+
+            // Try to fetch profile display name from LINE API if not provided
+            if ($lineName === '') {
+                $profile = $this->messagingService->getLineUserProfile($lineId);
+                $lineName = $profile['displayName'] ?? ($user->line_display_name ?: 'LINE User');
+            }
+
+            $user->update([
+                'line_user_id' => $lineId,
+                'line_display_name' => $lineName,
+                'line_linked_at' => Carbon::now(),
+            ]);
+
+            $this->messagingService->sendLinePushMessage(
+                $lineId,
+                "✅ ลงทะเบียนเชื่อมต่อ LINE OA กับรหัสประจำบัญชี {$cleanToken} สำเร็จ!\n"
+                . "👤 ผู้ใช้งาน: {$user->name} ({$user->provider_id})\n"
+                . "🏥 หน่วยงาน: {$agencyName}"
+            );
+        }
+
+        return redirect("/connect-notification?token={$cleanToken}")
+            ->with('success', "บันทึกการเชื่อมต่อเข้ากับรหัสประจำบัญชี {$cleanToken} ({$user->name}) เรียบร้อยแล้ว");
+    }
+
+    /**
+     * Poll Telegram Bot getUpdates on the Connect Page referencing `notification_link_token` (no webhook required).
+     */
+    public function syncTelegramByToken(Request $request): RedirectResponse
+    {
+        $token = strtoupper(trim((string) $request->input('token', '')));
+        $user = User::where('notification_link_token', $token)->first();
+
+        if (! $user) {
+            return back()->with('error', 'ไม่พบรหัสเชื่อมต่อประจำบัญชีที่ระบุ');
+        }
+
+        $result = $this->messagingService->syncTelegramUpdatesForUser($user);
+
+        if ($result['success']) {
+            return redirect("/connect-notification?token={$token}")->with('success', $result['message']);
+        }
+
+        return redirect("/connect-notification?token={$token}")->with('error', $result['message']);
+    }
+
+    /**
+     * Redirect user to LINE Login (OAuth 2.0) passing `notification_link_token` as state.
+     */
+    public function redirectToLineLogin(Request $request)
+    {
+        $token = strtoupper(trim((string) $request->query('token', '')));
+        $user = User::where('notification_link_token', $token)->first();
+
+        if (! $user) {
+            return redirect('/connect-notification')->with('error', 'กรุณาระบุรหัสเชื่อมต่อประจำบัญชี (เช่น SOC-123456) ที่ถูกต้องก่อนเข้าสู่ระบบด้วย LINE');
+        }
+
+        $callbackUrl = url('/connect-notification/line/callback');
+        $authorizeUrl = $this->messagingService->getLineLoginAuthorizeUrl($token, $callbackUrl);
+
+        if (! $authorizeUrl) {
+            return redirect("/connect-notification?token={$token}")
+                ->with('error', 'ระบบยังไม่ได้ตั้งค่า LINE_LOGIN_CHANNEL_ID ใน .env คุณสามารถกรอก LINE User ID หรือเข้าผ่านหน้ายืนยันตัวตนด้านล่างได้ทันที');
+        }
+
+        return Inertia::location($authorizeUrl);
+    }
+
+    /**
+     * Handle OAuth 2.0 callback from LINE Login and save `line_user_id` to the user matching `state` (SOC-XXXXXX).
+     */
+    public function handleLineLoginCallback(Request $request): RedirectResponse
+    {
+        $code = (string) $request->query('code', '');
+        $token = strtoupper(trim((string) $request->query('state', '')));
+        $error = (string) $request->query('error', '');
+
+        if ($error !== '' || $code === '') {
+            $errDesc = $request->query('error_description', 'ยกเลิกการเข้าสู่ระบบด้วย LINE');
+
+            return redirect("/connect-notification?token={$token}")
+                ->with('error', "ไม่สามารถเข้าสู่ระบบด้วย LINE ได้: {$errDesc}");
+        }
+
+        $user = User::where('notification_link_token', $token)->first();
+        if (! $user) {
+            return redirect('/connect-notification')
+                ->with('error', 'ไม่พบรหัสเชื่อมต่อประจำบัญชีที่อ้างอิงจากการเข้าสู่ระบบ LINE');
+        }
+
+        $callbackUrl = url('/connect-notification/line/callback');
+        $result = $this->messagingService->exchangeLineLoginCode($code, $callbackUrl);
+
+        if (! $result['success'] || empty($result['userId'])) {
+            return redirect("/connect-notification?token={$token}")
+                ->with('error', $result['message'] ?? 'ไม่สามารถดึง LINE User ID จากการล็อกอินได้');
+        }
+
+        $lineUserId = $result['userId'];
+        $displayName = $result['displayName'] ?? 'LINE User';
+
+        $user->update([
+            'line_user_id' => $lineUserId,
+            'line_display_name' => $displayName,
+            'line_linked_at' => Carbon::now(),
+        ]);
+
+        $this->messagingService->sendLinePushMessage(
+            $lineUserId,
+            "✅ ยืนยันตัวตนด้วย LINE Login สำเร็จ!\n"
+            . "🔗 รหัสประจำบัญชี: {$token}\n"
+            . "👤 ผู้ใช้งาน: {$user->name} ({$user->provider_id})\n"
+            . "🏥 หน่วยงาน: " . ($user->hname_th ?: $user->agency_name)
+        );
+
+        return redirect("/connect-notification?token={$token}")
+            ->with('success', "เข้าสู่ระบบด้วย LINE สำเร็จ! บันทึก LINE User ID ({$displayName}) เข้ากับบัญชี {$user->name} เรียบร้อยแล้ว");
+    }
+
+    /**
+     * Handle callback from Telegram Login Widget and save `telegram_chat_id` to the user matching `token` (SOC-XXXXXX).
+     */
+    public function handleTelegramLoginCallback(Request $request): RedirectResponse
+    {
+        $token = strtoupper(trim((string) $request->input('token', '')));
+        $user = User::where('notification_link_token', $token)->first();
+
+        if (! $user) {
+            return redirect('/connect-notification')
+                ->with('error', 'ไม่พบรหัสเชื่อมต่อประจำบัญชีที่อ้างอิงจากการล็อกอิน Telegram');
+        }
+
+        $authData = $request->only(['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date', 'hash']);
+
+        if (! $this->messagingService->verifyTelegramWidgetAuth($authData)) {
+            return redirect("/connect-notification?token={$token}")
+                ->with('error', 'การตรวจสอบลายเซ็นยืนยันตัวตนจาก Telegram Login ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
+        }
+
+        $chatId = (string) $authData['id'];
+        $username = $authData['username'] ?? trim(($authData['first_name'] ?? '') . ' ' . ($authData['last_name'] ?? ''));
+
+        $user->update([
+            'telegram_chat_id' => $chatId,
+            'telegram_username' => $username ?: 'TelegramUser',
+            'telegram_linked_at' => Carbon::now(),
+        ]);
+
+        $this->messagingService->sendTelegramMessage(
+            $chatId,
+            "✅ ยืนยันตัวตนด้วย Telegram Login สำเร็จ!\n"
+            . "🔗 รหัสประจำบัญชี: {$token}\n"
+            . "👤 ผู้ใช้งาน: {$user->name} ({$user->provider_id})\n"
+            . "🏥 หน่วยงาน: " . ($user->hname_th ?: $user->agency_name)
+        );
+
+        return redirect("/connect-notification?token={$token}")
+            ->with('success', "เข้าสู่ระบบด้วย Telegram สำเร็จ! บันทึก Chat ID: {$chatId} (@{$username}) เข้ากับบัญชี {$user->name} เรียบร้อยแล้ว");
+    }
+
+    /**
+     * Save or update user's Telegram Chat ID, LINE User ID, and notification preferences from Profile page.
      */
     public function update(Request $request): RedirectResponse
     {
@@ -238,146 +520,6 @@ class ProfileNotificationController extends Controller
     }
 
     /**
-     * Public Webhook endpoint for Telegram Bot updates.
-     */
-    public function handleTelegramWebhook(Request $request): JsonResponse
-    {
-        $payload = $request->all();
-        Log::info('Telegram Webhook Received:', $payload);
-
-        $message = $payload['message'] ?? null;
-        if (! $message) {
-            return response()->json(['status' => 'ignored']);
-        }
-
-        $chatId = (string) ($message['chat']['id'] ?? '');
-        $text = trim((string) ($message['text'] ?? ''));
-        $username = $message['from']['username'] ?? ($message['from']['first_name'] ?? 'TelegramUser');
-
-        if (! $chatId || $text === '') {
-            return response()->json(['status' => 'ok']);
-        }
-
-        // Support "/id" command to reply back the user's Telegram Chat ID
-        if (in_array(strtolower($text), ['/id', 'id', 'ขอรหัส'])) {
-            $this->messagingService->sendTelegramMessage(
-                $chatId,
-                "🆔 รหัส Telegram Chat ID ของคุณคือ:\n{$chatId}\n\nสามารถคัดลอกรหัสนี้ไปกรอกในหน้าโปรไฟล์ของระบบ CTMR Portal ได้ทันทีครับ"
-            );
-
-            return response()->json(['status' => 'replied_id']);
-        }
-
-        // Extract SOC-XXXXXX token from "/start SOC-XXXXXX" or direct text "SOC-XXXXXX"
-        if (preg_match('/(SOC-\d{6})/i', strtoupper($text), $matches)) {
-            $token = strtoupper($matches[1]);
-            $user = User::where('notification_link_token', $token)->first();
-
-            if ($user) {
-                $user->update([
-                    'telegram_chat_id' => $chatId,
-                    'telegram_username' => $username,
-                    'telegram_linked_at' => Carbon::now(),
-                ]);
-
-                $this->messagingService->sendTelegramMessage(
-                    $chatId,
-                    "✅ เชื่อมต่อบัญชี Telegram กับศูนย์ SOC สสจ.พิจิตร สำเร็จ!\n"
-                    . "👤 ชื่อ-สกุล: {$user->name} ({$user->provider_id})\n"
-                    . "🏥 หน่วยงาน: " . ($user->hname_th ?: $user->agency_name)
-                );
-
-                return response()->json(['status' => 'linked', 'user_id' => $user->id]);
-            }
-        }
-
-        return response()->json(['status' => 'ok']);
-    }
-
-    /**
-     * Public Webhook endpoint for LINE Official Account (Messaging API).
-     */
-    public function handleLineWebhook(Request $request): JsonResponse
-    {
-        $payload = $request->all();
-        Log::info('LINE OA Webhook Received:', $payload);
-
-        $events = $payload['events'] ?? [];
-        foreach ($events as $event) {
-            $lineUserId = $event['source']['userId'] ?? null;
-            $replyToken = $event['replyToken'] ?? null;
-            $eventType = $event['type'] ?? '';
-
-            if (! $lineUserId) {
-                continue;
-            }
-
-            // When user follows the LINE OA, greet them with their LINE User ID and instructions
-            if ($eventType === 'follow' && $replyToken) {
-                $this->messagingService->replyLineMessage(
-                    $replyToken,
-                    "สวัสดีครับ ยินดีต้อนรับสู่ศูนย์แจ้งเตือน CTMR SOC สสจ.พิจิตร 🛡️\n\n"
-                    . "🆔 LINE User ID ของคุณคือ:\n{$lineUserId}\n\n"
-                    . "📌 วิธีผูกบัญชีรับการแจ้งเตือน:\n"
-                    . "1. พิมพ์รหัสยืนยัน 6 หลักจากหน้าโปรไฟล์ของคุณ (เช่น SOC-123456) ส่งมาในแชทนี้\n"
-                    . "หรือคัดลอก LINE User ID ด้านบนไปวางในหน้าโปรไฟล์บนเว็บไซต์ได้ทันทีครับ"
-                );
-
-                continue;
-            }
-
-            if ($eventType === 'message' && ($event['message']['type'] ?? '') === 'text') {
-                $text = trim((string) ($event['message']['text'] ?? ''));
-
-                // Command to ask for own LINE User ID
-                if (in_array(strtolower($text), ['/id', 'id', 'ขอรหัส', 'userid'])) {
-                    if ($replyToken) {
-                        $this->messagingService->replyLineMessage(
-                            $replyToken,
-                            "🆔 LINE User ID ของคุณคือ:\n{$lineUserId}\n\nสามารถคัดลอกไปใส่ในหน้าโปรไฟล์ของระบบ CTMR Portal ได้ทันทีครับ"
-                        );
-                    }
-
-                    continue;
-                }
-
-                // Match SOC-XXXXXX verification code
-                if (preg_match('/(SOC-\d{6})/i', strtoupper($text), $matches)) {
-                    $token = strtoupper($matches[1]);
-                    $user = User::where('notification_link_token', $token)->first();
-
-                    if ($user) {
-                        $profile = $this->messagingService->getLineUserProfile($lineUserId);
-                        $displayName = $profile['displayName'] ?? 'LINE User';
-
-                        $user->update([
-                            'line_user_id' => $lineUserId,
-                            'line_display_name' => $displayName,
-                            'line_linked_at' => Carbon::now(),
-                        ]);
-
-                        if ($replyToken) {
-                            $this->messagingService->replyLineMessage(
-                                $replyToken,
-                                "✅ เชื่อมต่อบัญชี LINE OA กับศูนย์ SOC สสจ.พิจิตร สำเร็จ!\n"
-                                . "👤 ผู้ใช้งาน: {$user->name} ({$user->provider_id})\n"
-                                . "🏥 หน่วยงาน: " . ($user->hname_th ?: $user->agency_name)
-                            );
-                        }
-                    } elseif ($replyToken) {
-                        $this->messagingService->replyLineMessage(
-                            $replyToken,
-                            "❌ ไม่พบรหัสยืนยัน {$token} ในระบบ กรุณาตรวจสอบรหัสในหน้าโปรไฟล์ของคุณอีกครั้งครับ"
-                        );
-                    }
-                }
-            }
-        }
-
-        return response()->json(['status' => 'ok']);
-    }
-
-    /**
      * Generate a unique 6-digit verification token (e.g., SOC-482910).
      */
     private function generateUniqueLinkToken(): string
@@ -389,4 +531,3 @@ class ProfileNotificationController extends Controller
         return $token;
     }
 }
-

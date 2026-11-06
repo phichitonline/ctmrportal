@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { router, useForm, usePage } from '@inertiajs/react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
 import CtmrLayout from '../../Layouts/CtmrLayout';
 
 export default function Notifications({ userProfile, botConfig }) {
@@ -231,28 +231,35 @@ export default function Notifications({ userProfile, botConfig }) {
                         <div className="space-y-2">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#006BB4] uppercase tracking-wider">
-                                    🔑 รหัสยืนยันตัวตนเพื่อผูกบัญชีอัตโนมัติ (One-Time Link Code)
+                                    🔑 รหัสเชื่อมต่อประจำบัญชี & หน้าเพจ Login ยืนยันตัวตน (ไม่ต้องใช้ Webhook)
                                 </span>
                                 <span className="text-[11px] text-slate-500">
-                                    ใช้ได้ทั้ง Telegram Bot และ LINE Official Account
+                                    ใช้ผูกบัญชี Telegram และ LINE OA
                                 </span>
                             </div>
 
                             <p className="text-xs text-slate-600 leading-relaxed">
-                                คุณสามารถผูกบัญชีได้ <strong>2 วิธี</strong> คือ: <strong>(1) ส่งรหัสยืนยันด้านล่างไปในแชทของบอท</strong> เพื่อให้ระบบบันทึก ID เข้ากับโปรไฟล์ของคุณโดยอัตโนมัติ หรือ <strong>(2) กรอกรหัส Chat ID / LINE User ID ด้วยตนเอง</strong> ในการ์ดด้านล่าง
+                                ระบบใช้ <strong>หน้าเพจ Login เชื่อมต่อบัญชี</strong> โดยอ้างอิงรหัสประจำตัวด้านล่าง (<code className="font-mono font-bold text-[#006BB4]">{userProfile.notification_link_token}</code>) เพื่อดึงและบันทึก <code>Telegram Chat ID</code> และ <code>LINE User ID</code> เข้าสู่โปรไฟล์ของคุณโดยไม่ต้องพึ่งพา Webhook
                             </p>
 
                             <div className="mt-3 p-3.5 bg-white border-2 border-dashed border-sky-300 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
                                 <div className="text-center sm:text-left">
                                     <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                                        รหัสเชื่อมต่อประจำบัญชีของคุณ (ส่งข้อความนี้ในแชทบอท)
+                                        รหัสเชื่อมต่อประจำบัญชีของคุณ (Account Link Code)
                                     </div>
                                     <div className="text-2xl font-mono font-extrabold text-[#006BB4] tracking-widest mt-0.5 select-all">
                                         {userProfile.notification_link_token}
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-2 shrink-0">
+                                <div className="flex flex-wrap items-center justify-center gap-2 shrink-0">
+                                    <Link
+                                        href={`/connect-notification?token=${userProfile.notification_link_token}`}
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1.5"
+                                    >
+                                        <span>🔗 เปิดหน้าเพจ Login เชื่อมต่อบัญชี</span>
+                                    </Link>
+
                                     <button
                                         type="button"
                                         onClick={handleCopyToken}
@@ -278,28 +285,40 @@ export default function Notifications({ userProfile, botConfig }) {
                         </div>
 
                         <div className="mt-3 pt-3 border-t border-sky-100 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
-                            <span>💡 ทริค: พิมพ์ <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-700">/id</code> ในห้องแชท Telegram หรือ LINE OA เพื่อให้บอทตอบกลับรหัส ID ของคุณได้เช่นกัน</span>
+                            <div className="flex items-center gap-2 truncate">
+                                <span>📱 ลิงก์ลงทะเบียนสำหรับเปิดบนมือถือ:</span>
+                                <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-700 truncate">
+                                    {botConfig?.connect_page_url}
+                                </code>
+                                <button
+                                    type="button"
+                                    onClick={() => handleCopyText(botConfig?.connect_page_url, 'connect_url')}
+                                    className="text-[#006BB4] font-semibold hover:underline cursor-pointer shrink-0"
+                                >
+                                    {copiedWebhook === 'connect_url' ? 'คัดลอกลิงก์แล้ว!' : 'คัดลอกลิงก์'}
+                                </button>
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => setShowWebhookGuide(!showWebhookGuide)}
                                 className="text-[#006BB4] font-semibold hover:underline cursor-pointer"
                             >
-                                {showWebhookGuide ? 'ซ่อนข้อมูลตั้งค่าบอท (Admin)' : '⚙️ ดูคู่มือตั้งค่า Bot Token & Webhook'}
+                                {showWebhookGuide ? 'ซ่อนข้อมูลตั้งค่า .env (Admin)' : '⚙️ ดูคู่มือตั้งค่า Telegram & LINE Login (.env)'}
                             </button>
                         </div>
                     </div>
                 </div>
 
-                {/* COLLAPSIBLE BOT & WEBHOOK SETUP GUIDE FOR ADMIN */}
+                {/* COLLAPSIBLE BOT & LOGIN SETUP GUIDE FOR ADMIN */}
                 {showWebhookGuide && (
                     <div className="bg-slate-900 text-slate-100 rounded-xl p-5 border border-slate-700 space-y-4 text-xs">
                         <div className="flex items-center justify-between border-b border-slate-700 pb-3">
                             <div>
                                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                                    <span>🛠️ สำหรับผู้ดูแลระบบ: การตั้งค่าเชื่อมต่อ Telegram Bot และ LINE Messaging API</span>
+                                    <span>🛠️ สำหรับผู้ดูแลระบบ: การตั้งค่า Telegram Login / Bot และ LINE Login / Messaging API (ไม่ต้องใช้ Webhook)</span>
                                 </h3>
                                 <p className="text-[11px] text-slate-400 mt-0.5">
-                                    กำหนดค่าในไฟล์ <code className="text-amber-300">.env</code> ของเซิร์ฟเวอร์ (หากยังไม่ได้ใส่ Token ระบบจะทำงานในโหมดจำลอง Simulation Mode เพื่อทดสอบหน้าเว็บได้ทันที)
+                                    กำหนดค่าในไฟล์ <code className="text-amber-300">.env</code> ของเซิร์ฟเวอร์ (อ้างอิงการล็อกอินผ่านรหัสประจำบัญชีแทนการใช้ Webhook)
                                 </p>
                             </div>
                             <button
@@ -314,7 +333,7 @@ export default function Notifications({ userProfile, botConfig }) {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="bg-slate-800/80 border border-slate-700 rounded-lg p-3.5 space-y-2">
                                 <div className="font-bold text-sky-400 flex items-center justify-between">
-                                    <span>1. Telegram Bot (@BotFather)</span>
+                                    <span>1. Telegram Bot & Login Widget (@BotFather)</span>
                                     <span className={`px-2 py-0.5 rounded text-[10px] ${botConfig?.telegram_configured ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
                                         {botConfig?.telegram_configured ? 'ตั้งค่า Token แล้ว' : 'โหมดจำลอง (ยังไม่ตั้งค่า Token)'}
                                     </span>
@@ -325,11 +344,11 @@ TELEGRAM_BOT_USERNAME="PhichitSocBot"`}
                                 </pre>
                                 <div className="flex items-center justify-between gap-2 bg-slate-950/60 px-2.5 py-1.5 rounded">
                                     <span className="font-mono text-[11px] text-slate-300 truncate">
-                                        Webhook: {botConfig?.telegram_webhook_url}
+                                        Callback URL: {botConfig?.telegram_callback_url}
                                     </span>
                                     <button
                                         type="button"
-                                        onClick={() => handleCopyText(botConfig?.telegram_webhook_url, 'tg')}
+                                        onClick={() => handleCopyText(botConfig?.telegram_callback_url, 'tg')}
                                         className="text-sky-400 hover:underline shrink-0 cursor-pointer"
                                     >
                                         {copiedWebhook === 'tg' ? 'คัดลอกแล้ว' : 'คัดลอก'}
@@ -339,23 +358,24 @@ TELEGRAM_BOT_USERNAME="PhichitSocBot"`}
 
                             <div className="bg-slate-800/80 border border-slate-700 rounded-lg p-3.5 space-y-2">
                                 <div className="font-bold text-emerald-400 flex items-center justify-between">
-                                    <span>2. LINE Official Account (Messaging API)</span>
+                                    <span>2. LINE Login & LINE OA Push API</span>
                                     <span className={`px-2 py-0.5 rounded text-[10px] ${botConfig?.line_configured ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
                                         {botConfig?.line_configured ? 'ตั้งค่า Token แล้ว' : 'โหมดจำลอง (ยังไม่ตั้งค่า Token)'}
                                     </span>
                                 </div>
                                 <pre className="bg-slate-950 p-2.5 rounded text-[11px] font-mono text-emerald-200 overflow-x-auto">
-{`LINE_CHANNEL_ACCESS_TOKEN="eyJhbGci..."
-LINE_CHANNEL_SECRET="a1b2c3d4..."
+{`LINE_LOGIN_CHANNEL_ID="2000..."
+LINE_LOGIN_CHANNEL_SECRET="a1b2c3..."
+LINE_CHANNEL_ACCESS_TOKEN="eyJhbGci..."
 LINE_BOT_BASIC_ID="@phichitsoc"`}
                                 </pre>
                                 <div className="flex items-center justify-between gap-2 bg-slate-950/60 px-2.5 py-1.5 rounded">
                                     <span className="font-mono text-[11px] text-slate-300 truncate">
-                                        Webhook: {botConfig?.line_webhook_url}
+                                        LINE Login Callback: {botConfig?.line_callback_url}
                                     </span>
                                     <button
                                         type="button"
-                                        onClick={() => handleCopyText(botConfig?.line_webhook_url, 'line')}
+                                        onClick={() => handleCopyText(botConfig?.line_callback_url, 'line')}
                                         className="text-emerald-400 hover:underline shrink-0 cursor-pointer"
                                     >
                                         {copiedWebhook === 'line' ? 'คัดลอกแล้ว' : 'คัดลอก'}
@@ -609,16 +629,16 @@ LINE_BOT_BASIC_ID="@phichitsoc"`}
                                         </div>
                                     ) : (
                                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600 space-y-2">
-                                            <div className="font-bold text-slate-800">ขั้นตอนการลงทะเบียน LINE OA:</div>
+                                            <div className="font-bold text-slate-800">ขั้นตอนการลงทะเบียน LINE OA (ผ่านหน้าเพจ Login):</div>
                                             <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed">
                                                 <li>
-                                                    เพิ่มเพื่อน LINE Official Account <strong className="text-emerald-700 font-mono">{botConfig?.line_bot_basic_id || '@phichitsoc'}</strong>
+                                                    คลิกปุ่ม <strong>"เข้าสู่ระบบด้วย LINE (LINE Login)"</strong> ด้านล่าง หรือเปิดผ่าน <strong>หน้าเพจ Login เชื่อมต่อบัญชี</strong> ด้วยรหัส <code className="bg-emerald-100 text-emerald-800 font-mono font-bold px-1.5 py-0.5 rounded">{userProfile.notification_link_token}</code>
                                                 </li>
                                                 <li>
-                                                    พิมพ์รหัสยืนยัน <code className="bg-emerald-100 text-emerald-800 font-mono font-bold px-1.5 py-0.5 rounded">{userProfile.notification_link_token}</code> ส่งเข้าไปในแชท LINE OA
+                                                    เพิ่มเพื่อน LINE OA <strong className="text-emerald-700 font-mono">{botConfig?.line_bot_basic_id || '@phichitsoc'}</strong> เพื่อรับข้อความแจ้งเตือน
                                                 </li>
                                                 <li>
-                                                    ระบบจะบันทึก <code>LINE User ID</code> ให้โดยอัตโนมัติ (หรือพิมพ์ <code>/id</code> ในแชท LINE เพื่อนำรหัส <code>U...</code> มากรอกด้านล่าง)
+                                                    ระบบจะดึงและบันทึก <code>LINE User ID</code> เข้ากับรหัสประจำบัญชีของคุณโดยอัตโนมัติ (หรือกรอก <code>LINE User ID</code> ด้านล่างได้โดยตรง)
                                                 </li>
                                             </ol>
                                         </div>
@@ -626,24 +646,19 @@ LINE_BOT_BASIC_ID="@phichitsoc"`}
 
                                     {/* Quick Action Buttons for LINE */}
                                     <div className="flex flex-wrap items-center gap-2">
-                                        {botConfig?.line_bot_basic_id && (
-                                            <a
-                                                href={`https://line.me/R/ti/p/${encodeURIComponent(botConfig.line_bot_basic_id)}`}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="px-3 py-2 bg-[#06C755] hover:bg-[#05a847] text-white text-xs font-semibold rounded-lg transition flex items-center gap-1.5 shadow-2xs"
-                                            >
-                                                <span>💬 เพิ่มเพื่อน LINE OA</span>
-                                            </a>
-                                        )}
-
-                                        <button
-                                            type="button"
-                                            onClick={() => router.reload({ preserveScroll: true })}
-                                            className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-lg transition cursor-pointer flex items-center gap-1.5"
+                                        <a
+                                            href={`/connect-notification/line/redirect?token=${encodeURIComponent(userProfile.notification_link_token)}`}
+                                            className="px-3 py-2 bg-[#06C755] hover:bg-[#05a847] text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow-2xs"
                                         >
-                                            <span>🔄 รีเฟรชสถานะการเชื่อมต่อ</span>
-                                        </button>
+                                            <span>🟢 เข้าสู่ระบบด้วย LINE (ผูก ID อัตโนมัติ)</span>
+                                        </a>
+
+                                        <Link
+                                            href={`/connect-notification?token=${userProfile.notification_link_token}`}
+                                            className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-lg transition flex items-center gap-1.5"
+                                        >
+                                            <span>🔗 หน้าเพจ Login ด้วยรหัส {userProfile.notification_link_token}</span>
+                                        </Link>
 
                                         {isLineLinked && (
                                             <button
