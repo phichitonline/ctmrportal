@@ -126,9 +126,9 @@ export default function Notifications({ userProfile, botConfig }) {
         ? `https://t.me/${telegramBotClean}?start=${userProfile.notification_link_token}`
         : null;
 
-    // Mount Official Telegram Login Widget inside Profile Notifications page
+    // Mount Official Telegram Login Widget inside Profile Notifications page (only when not linked yet)
     useEffect(() => {
-        if (!telegramWidgetRef.current || !telegramBotClean || !userProfile.notification_link_token) return;
+        if (isTelegramLinked || !telegramWidgetRef.current || !telegramBotClean || !userProfile.notification_link_token) return;
 
         telegramWidgetRef.current.innerHTML = '';
         const script = document.createElement('script');
@@ -143,7 +143,7 @@ export default function Notifications({ userProfile, botConfig }) {
         );
         script.setAttribute('data-request-access', 'write');
         telegramWidgetRef.current.appendChild(script);
-    }, [telegramBotClean, userProfile.notification_link_token, botConfig?.telegram_callback_url]);
+    }, [isTelegramLinked, telegramBotClean, userProfile.notification_link_token, botConfig?.telegram_callback_url]);
 
     return (
         <CtmrLayout title="โปรไฟล์ & แจ้งเตือน Telegram / LINE" activeNav="profile-notifications">
@@ -444,9 +444,9 @@ LINE_BOT_BASIC_ID="@phichitsoc"`}
                                 <div className="space-y-4">
                                     {/* Connection Info Banner */}
                                     {isTelegramLinked ? (
-                                        <div className="bg-sky-50 border border-sky-200 rounded-lg p-3.5 flex items-center justify-between gap-3">
-                                            <div className="text-xs space-y-0.5">
-                                                <div className="font-bold text-sky-900 flex items-center gap-1.5">
+                                        <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                            <div className="text-xs space-y-1">
+                                                <div className="font-bold text-sky-900 flex items-center gap-1.5 text-sm">
                                                     <span>✅ ผูกบัญชี Telegram สำเร็จแล้ว</span>
                                                 </div>
                                                 <div className="text-slate-600 font-mono text-[11px]">
@@ -461,119 +461,120 @@ LINE_BOT_BASIC_ID="@phichitsoc"`}
                                                     </div>
                                                 )}
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleUnlinkChannel('telegram')}
-                                                className="px-2.5 py-1.5 text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition cursor-pointer shrink-0"
-                                            >
-                                                ยกเลิกผูกบัญชี
-                                            </button>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleTestNotification('telegram')}
+                                                    disabled={testingChannel === 'telegram'}
+                                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold rounded-md transition cursor-pointer disabled:opacity-50"
+                                                >
+                                                    {testingChannel === 'telegram' ? 'กำลังส่ง...' : '🔔 ทดสอบส่งข้อความ'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleUnlinkChannel('telegram')}
+                                                    className="px-2.5 py-1.5 text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition cursor-pointer"
+                                                >
+                                                    ยกเลิกผูกบัญชี
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
-                                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600 space-y-2">
-                                            <div className="font-bold text-slate-800">ขั้นตอนการลงทะเบียน Telegram:</div>
-                                            <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed">
-                                                <li>
-                                                    คลิกปุ่มเปิดแชทบอท{' '}
+                                        <>
+                                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600 space-y-2">
+                                                <div className="font-bold text-slate-800">ขั้นตอนการลงทะเบียน Telegram:</div>
+                                                <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed">
+                                                    <li>
+                                                        กดปุ่ม <strong>Telegram Login</strong> ด้านล่าง หรือคลิกปุ่มเปิดแชทบอท{' '}
+                                                        {telegramDeepLink && (
+                                                            <a
+                                                                href={telegramDeepLink}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="text-[#0088cc] font-bold underline"
+                                                            >
+                                                                @{telegramBotClean}
+                                                            </a>
+                                                        )}{' '}
+                                                        แล้วกด <strong>Start</strong>
+                                                    </li>
+                                                    <li>
+                                                        ส่งข้อความรหัส <code className="bg-sky-100 text-sky-800 font-mono font-bold px-1.5 py-0.5 rounded">{userProfile.notification_link_token}</code> ในแชทบอท
+                                                    </li>
+                                                    <li>
+                                                        กดปุ่ม <strong>"🔄 ดึงรหัส Chat ID จากบอทอัตโนมัติ"</strong> ด้านล่าง หรือกรอก <code>Chat ID</code> ด้วยตนเอง
+                                                    </li>
+                                                </ol>
+                                            </div>
+
+                                            {/* Official Telegram Login Widget & Quick Action Buttons */}
+                                            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                                                <div className="text-xs font-bold text-slate-800">
+                                                    ล็อกอินผ่านปุ่ม Telegram Login หรือผ่านแชทบอท (อ้างอิงรหัส {userProfile.notification_link_token})
+                                                </div>
+
+                                                {/* Telegram Login Widget Button (Log in as ...) */}
+                                                <div ref={telegramWidgetRef} className="min-h-[40px] flex items-center" />
+
+                                                <div className="flex flex-wrap items-center gap-2 pt-1">
                                                     {telegramDeepLink && (
                                                         <a
                                                             href={telegramDeepLink}
                                                             target="_blank"
                                                             rel="noreferrer"
-                                                            className="text-[#0088cc] font-bold underline"
+                                                            className="px-3 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg transition flex items-center gap-1.5 shadow-2xs"
                                                         >
-                                                            @{telegramBotClean}
+                                                            <span>1. ✈️ เปิดบอท @{telegramBotClean}</span>
                                                         </a>
-                                                    )}{' '}
-                                                    แล้วกด <strong>Start</strong>
-                                                </li>
-                                                <li>
-                                                    ส่งข้อความรหัส <code className="bg-sky-100 text-sky-800 font-mono font-bold px-1.5 py-0.5 rounded">{userProfile.notification_link_token}</code> ในแชทบอท
-                                                </li>
-                                                <li>
-                                                    กดปุ่ม <strong>"🔄 ซิงค์ข้อมูลจาก Telegram Bot"</strong> ด้านล่าง หรือกรอก <code>Chat ID</code> ด้วยตนเอง
-                                                </li>
-                                            </ol>
-                                        </div>
+                                                    )}
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSyncTelegram}
+                                                        disabled={syncingTelegram}
+                                                        className="px-3 py-2 bg-sky-50 hover:bg-sky-100 text-[#006BB4] border border-sky-200 text-xs font-semibold rounded-lg transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                                                    >
+                                                        <span>{syncingTelegram ? '⏳ กำลังตรวจสอบ...' : '2. 🔄 ดึงรหัส Chat ID จากบอทอัตโนมัติ'}</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Manual Input Fields */}
+                                            <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                                        Telegram Chat ID (ตัวเลข)
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={data.telegram_chat_id}
+                                                        onChange={(e) => setData('telegram_chat_id', e.target.value)}
+                                                        placeholder="เช่น 123456789 หรือ -100123456"
+                                                        className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                                                    />
+                                                    {errors.telegram_chat_id && (
+                                                        <p className="text-rose-600 text-[11px] mt-1">{errors.telegram_chat_id}</p>
+                                                    )}
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                                        Telegram Username (ไม่บังคับ)
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={data.telegram_username}
+                                                        onChange={(e) => setData('telegram_username', e.target.value)}
+                                                        placeholder="เช่น somchai_soc (ไม่ต้องใส่ @)"
+                                                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
+                                                    />
+                                                    {errors.telegram_username && (
+                                                        <p className="text-rose-600 text-[11px] mt-1">{errors.telegram_username}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </>
                                     )}
-
-                                    {/* Official Telegram Login Widget & Quick Action Buttons */}
-                                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-                                        <div className="text-xs font-bold text-slate-800">
-                                            ล็อกอินผ่านปุ่ม Telegram Login หรือผ่านแชทบอท (อ้างอิงรหัส {userProfile.notification_link_token})
-                                        </div>
-
-                                        {/* Telegram Login Widget Button (Log in as ...) */}
-                                        <div ref={telegramWidgetRef} className="min-h-[40px] flex items-center" />
-
-                                        <div className="flex flex-wrap items-center gap-2 pt-1">
-                                            {telegramDeepLink && (
-                                                <a
-                                                    href={telegramDeepLink}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="px-3 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-xs font-semibold rounded-lg transition flex items-center gap-1.5 shadow-2xs"
-                                                >
-                                                    <span>1. ✈️ เปิดบอท @{telegramBotClean}</span>
-                                                </a>
-                                            )}
-
-                                            <button
-                                                type="button"
-                                                onClick={handleSyncTelegram}
-                                                disabled={syncingTelegram}
-                                                className="px-3 py-2 bg-sky-50 hover:bg-sky-100 text-[#006BB4] border border-sky-200 text-xs font-semibold rounded-lg transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                                            >
-                                                <span>{syncingTelegram ? '⏳ กำลังตรวจสอบ...' : '2. 🔄 ดึงรหัส Chat ID จากบอทอัตโนมัติ'}</span>
-                                            </button>
-
-                                            {isTelegramLinked && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleTestNotification('telegram')}
-                                                    disabled={testingChannel === 'telegram'}
-                                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5 ml-auto"
-                                                >
-                                                    <span>{testingChannel === 'telegram' ? 'กำลังส่ง...' : '🔔 ทดสอบส่งข้อความ'}</span>
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Manual Input Fields */}
-                                    <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                                                Telegram Chat ID (ตัวเลข)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={data.telegram_chat_id}
-                                                onChange={(e) => setData('telegram_chat_id', e.target.value)}
-                                                placeholder="เช่น 123456789 หรือ -100123456"
-                                                className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
-                                            />
-                                            {errors.telegram_chat_id && (
-                                                <p className="text-rose-600 text-[11px] mt-1">{errors.telegram_chat_id}</p>
-                                            )}
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                                                Telegram Username (ไม่บังคับ)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={data.telegram_username}
-                                                onChange={(e) => setData('telegram_username', e.target.value)}
-                                                placeholder="เช่น somchai_soc (ไม่ต้องใส่ @)"
-                                                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0088cc]"
-                                            />
-                                            {errors.telegram_username && (
-                                                <p className="text-rose-600 text-[11px] mt-1">{errors.telegram_username}</p>
-                                            )}
-                                        </div>
-                                    </div>
                                 </div>
 
                                 {/* Channel Toggle */}
@@ -629,9 +630,9 @@ LINE_BOT_BASIC_ID="@phichitsoc"`}
                                 <div className="space-y-4">
                                     {/* Connection Status Banner */}
                                     {isLineLinked ? (
-                                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3.5 flex items-center justify-between gap-3">
-                                            <div className="text-xs space-y-0.5 min-w-0">
-                                                <div className="font-bold text-emerald-900 flex items-center gap-1.5">
+                                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                            <div className="text-xs space-y-1 min-w-0">
+                                                <div className="font-bold text-emerald-900 flex items-center gap-1.5 text-sm">
                                                     <span>✅ ผูกบัญชี LINE Official Account สำเร็จแล้ว</span>
                                                 </div>
                                                 <div className="text-slate-600 font-mono text-[11px] truncate">
@@ -648,93 +649,94 @@ LINE_BOT_BASIC_ID="@phichitsoc"`}
                                                     </div>
                                                 )}
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleUnlinkChannel('line')}
-                                                className="px-2.5 py-1.5 text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition cursor-pointer shrink-0"
-                                            >
-                                                ยกเลิกผูกบัญชี
-                                            </button>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleTestNotification('line')}
+                                                    disabled={testingChannel === 'line'}
+                                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold rounded-md transition cursor-pointer disabled:opacity-50"
+                                                >
+                                                    {testingChannel === 'line' ? 'กำลังส่ง...' : '🔔 ทดสอบส่งข้อความ LINE'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleUnlinkChannel('line')}
+                                                    className="px-2.5 py-1.5 text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition cursor-pointer"
+                                                >
+                                                    ยกเลิกผูกบัญชี
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
-                                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600 space-y-2">
-                                            <div className="font-bold text-slate-800">ขั้นตอนการลงทะเบียน LINE OA (ผ่านหน้าเพจ Login):</div>
-                                            <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed">
-                                                <li>
-                                                    คลิกปุ่ม <strong>"เข้าสู่ระบบด้วย LINE (LINE Login)"</strong> ด้านล่าง หรือเปิดผ่าน <strong>หน้าเพจ Login เชื่อมต่อบัญชี</strong> ด้วยรหัส <code className="bg-emerald-100 text-emerald-800 font-mono font-bold px-1.5 py-0.5 rounded">{userProfile.notification_link_token}</code>
-                                                </li>
-                                                <li>
-                                                    เพิ่มเพื่อน LINE OA <strong className="text-emerald-700 font-mono">{botConfig?.line_bot_basic_id || '@phichitsoc'}</strong> เพื่อรับข้อความแจ้งเตือน
-                                                </li>
-                                                <li>
-                                                    ระบบจะดึงและบันทึก <code>LINE User ID</code> เข้ากับรหัสประจำบัญชีของคุณโดยอัตโนมัติ (หรือกรอก <code>LINE User ID</code> ด้านล่างได้โดยตรง)
-                                                </li>
-                                            </ol>
-                                        </div>
+                                        <>
+                                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600 space-y-2">
+                                                <div className="font-bold text-slate-800">ขั้นตอนการลงทะเบียน LINE OA (ผ่านหน้าเพจ Login):</div>
+                                                <ol className="list-decimal list-inside space-y-1 text-[11px] leading-relaxed">
+                                                    <li>
+                                                        คลิกปุ่ม <strong>"เข้าสู่ระบบด้วย LINE (LINE Login)"</strong> ด้านล่าง หรือเปิดผ่าน <strong>หน้าเพจ Login เชื่อมต่อบัญชี</strong> ด้วยรหัส <code className="bg-emerald-100 text-emerald-800 font-mono font-bold px-1.5 py-0.5 rounded">{userProfile.notification_link_token}</code>
+                                                    </li>
+                                                    <li>
+                                                        เพิ่มเพื่อน LINE OA <strong className="text-emerald-700 font-mono">{botConfig?.line_bot_basic_id || '@phichitsoc'}</strong> เพื่อรับข้อความแจ้งเตือน
+                                                    </li>
+                                                    <li>
+                                                        ระบบจะดึงและบันทึก <code>LINE User ID</code> เข้ากับรหัสประจำบัญชีของคุณโดยอัตโนมัติ (หรือกรอก <code>LINE User ID</code> ด้านล่างได้โดยตรง)
+                                                    </li>
+                                                </ol>
+                                            </div>
+
+                                            {/* Quick Action Buttons for LINE */}
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <a
+                                                    href={`/connect-notification/line/redirect?token=${encodeURIComponent(userProfile.notification_link_token)}`}
+                                                    className="px-3 py-2 bg-[#06C755] hover:bg-[#05a847] text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow-2xs"
+                                                >
+                                                    <span>🟢 เข้าสู่ระบบด้วย LINE (ผูก ID อัตโนมัติ)</span>
+                                                </a>
+
+                                                <Link
+                                                    href={`/connect-notification?token=${userProfile.notification_link_token}`}
+                                                    className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-lg transition flex items-center gap-1.5"
+                                                >
+                                                    <span>🔗 หน้าเพจ Login ด้วยรหัส {userProfile.notification_link_token}</span>
+                                                </Link>
+                                            </div>
+
+                                            {/* Manual Input Fields */}
+                                            <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                                        LINE User ID (ขึ้นต้นด้วย U...)
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={data.line_user_id}
+                                                        onChange={(e) => setData('line_user_id', e.target.value)}
+                                                        placeholder="เช่น U4af4980629..."
+                                                        className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#06C755]"
+                                                    />
+                                                    {errors.line_user_id && (
+                                                        <p className="text-rose-600 text-[11px] mt-1">{errors.line_user_id}</p>
+                                                    )}
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                                        ชื่อที่ใช้แสดงใน LINE (ไม่บังคับ)
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={data.line_display_name}
+                                                        onChange={(e) => setData('line_display_name', e.target.value)}
+                                                        placeholder="เช่น สมชาย (รพ.พิจิตร)"
+                                                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#06C755]"
+                                                    />
+                                                    {errors.line_display_name && (
+                                                        <p className="text-rose-600 text-[11px] mt-1">{errors.line_display_name}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </>
                                     )}
-
-                                    {/* Quick Action Buttons for LINE */}
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <a
-                                            href={`/connect-notification/line/redirect?token=${encodeURIComponent(userProfile.notification_link_token)}`}
-                                            className="px-3 py-2 bg-[#06C755] hover:bg-[#05a847] text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow-2xs"
-                                        >
-                                            <span>🟢 เข้าสู่ระบบด้วย LINE (ผูก ID อัตโนมัติ)</span>
-                                        </a>
-
-                                        <Link
-                                            href={`/connect-notification?token=${userProfile.notification_link_token}`}
-                                            className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-lg transition flex items-center gap-1.5"
-                                        >
-                                            <span>🔗 หน้าเพจ Login ด้วยรหัส {userProfile.notification_link_token}</span>
-                                        </Link>
-
-                                        {isLineLinked && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleTestNotification('line')}
-                                                disabled={testingChannel === 'line'}
-                                                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5 ml-auto"
-                                            >
-                                                <span>{testingChannel === 'line' ? 'กำลังส่ง...' : '🔔 ทดสอบส่งข้อความ LINE'}</span>
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {/* Manual Input Fields */}
-                                    <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                                                LINE User ID (ขึ้นต้นด้วย U...)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={data.line_user_id}
-                                                onChange={(e) => setData('line_user_id', e.target.value)}
-                                                placeholder="เช่น U4af4980629..."
-                                                className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#06C755]"
-                                            />
-                                            {errors.line_user_id && (
-                                                <p className="text-rose-600 text-[11px] mt-1">{errors.line_user_id}</p>
-                                            )}
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                                                ชื่อที่ใช้แสดงใน LINE (ไม่บังคับ)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={data.line_display_name}
-                                                onChange={(e) => setData('line_display_name', e.target.value)}
-                                                placeholder="เช่น สมชาย (รพ.พิจิตร)"
-                                                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#06C755]"
-                                            />
-                                            {errors.line_display_name && (
-                                                <p className="text-rose-600 text-[11px] mt-1">{errors.line_display_name}</p>
-                                            )}
-                                        </div>
-                                    </div>
                                 </div>
 
                                 {/* Channel Toggle */}
