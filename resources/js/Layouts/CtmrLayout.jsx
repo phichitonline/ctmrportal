@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Link, Head, usePage } from '@inertiajs/react';
 
 export default function CtmrLayout({ children, title = 'Overview', activeNav = 'overview' }) {
-    const { auth, flash } = usePage().props;
+    const { auth, flash, onlineUsers = { count: 1, users: [] } } = usePage().props;
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [onlineMenuOpen, setOnlineMenuOpen] = useState(false);
     const [hospitalModalOpen, setHospitalModalOpen] = useState(false);
     const [moduleModal, setModuleModal] = useState({
         open: false,
@@ -171,10 +172,124 @@ export default function CtmrLayout({ children, title = 'Overview', activeNav = '
 
                 {/* Right Tools */}
                 <div className="flex items-center gap-2 sm:gap-3">
+                    {/* ONLINE USERS INDICATOR & POPOVER */}
+                    <div className="relative">
+                        <button
+                            onClick={() => {
+                                setOnlineMenuOpen(!onlineMenuOpen);
+                                setUserMenuOpen(false);
+                            }}
+                            className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-50/90 hover:bg-emerald-100/90 border border-emerald-200 text-emerald-800 text-xs font-semibold transition cursor-pointer shadow-2xs"
+                            title="คลิกเพื่อดูรายชื่อผู้ใช้งานที่กำลังออนไลน์ในขณะนี้"
+                        >
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            <span className="hidden sm:inline text-[11px] font-bold">Online:</span>
+                            <span className="text-[11px] font-extrabold text-emerald-700">
+                                {onlineUsers?.count || 1} คน
+                            </span>
+                            {Array.isArray(onlineUsers?.users) && onlineUsers.users.length > 0 && (
+                                <div className="hidden md:flex -space-x-1.5 overflow-hidden ml-0.5">
+                                    {onlineUsers.users.slice(0, 3).map((ou) => (
+                                        <span
+                                            key={ou.id}
+                                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#006BB4] text-white text-[9px] font-bold ring-1 ring-white uppercase"
+                                            title={`${ou.name} (${ou.agency_name || ou.provider_id})`}
+                                        >
+                                            {ou.initials}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </button>
+
+                        {/* Online Users Dropdown Panel */}
+                        {onlineMenuOpen && (
+                            <>
+                                <div className="fixed inset-0 z-40" onClick={() => setOnlineMenuOpen(false)} />
+                                <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden text-xs">
+                                    <div className="px-4 py-2.5 bg-gradient-to-r from-emerald-50 to-teal-50/60 border-b border-emerald-100 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                            <span className="font-bold text-slate-800">
+                                                ผู้ใช้งานออนไลน์ ({onlineUsers?.count || 1})
+                                            </span>
+                                        </div>
+                                        <span className="text-[10px] font-medium text-emerald-700 bg-white/80 px-2 py-0.5 rounded-full border border-emerald-200">
+                                            Active Session
+                                        </span>
+                                    </div>
+
+                                    <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                                        {(onlineUsers?.users || []).map((ou) => (
+                                            <div
+                                                key={ou.id}
+                                                className="px-4 py-2.5 hover:bg-slate-50 transition flex items-start justify-between gap-2.5"
+                                            >
+                                                <div className="flex items-start gap-2.5 min-w-0">
+                                                    <div className="relative shrink-0 mt-0.5">
+                                                        <div className="w-8 h-8 rounded-full bg-[#006BB4] text-white flex items-center justify-center font-bold text-[11px] uppercase">
+                                                            {ou.initials}
+                                                        </div>
+                                                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="font-bold text-slate-800 truncate">
+                                                                {ou.name}
+                                                            </span>
+                                                            {ou.is_current && (
+                                                                <span className="px-1.5 py-0.2 rounded bg-sky-100 text-[#006BB4] text-[9px] font-bold shrink-0">
+                                                                    คุณ
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-500 truncate">
+                                                            {ou.position}
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-400 truncate">
+                                                            🏥 {ou.agency_code ? `${ou.agency_code} • ` : ''}{ou.agency_name}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    <span className="inline-block text-[10px] font-semibold text-emerald-600">
+                                                        ● ออนไลน์
+                                                    </span>
+                                                    <div className="text-[9px] text-slate-400 mt-0.5">
+                                                        {ou.last_active_label}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                                        <span className="text-slate-400">อัปเดตสถานะตาม Session จริง</span>
+                                        <Link
+                                            href="/team"
+                                            onClick={() => setOnlineMenuOpen(false)}
+                                            className="text-[#006BB4] hover:underline font-semibold"
+                                        >
+                                            ดูทำเนียบทีม →
+                                        </Link>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="h-5 w-px bg-slate-200 hidden sm:block"></div>
+
                     {/* USER PROFILE & LOGOUT DROPDOWN */}
                     <div className="relative">
                         <button
-                            onClick={() => setUserMenuOpen(!userMenuOpen)}
+                            onClick={() => {
+                                setUserMenuOpen(!userMenuOpen);
+                                setOnlineMenuOpen(false);
+                            }}
                             className="flex items-center gap-2 p-1 rounded-full hover:bg-slate-100 transition cursor-pointer focus:outline-none"
                             title={auth?.user ? `${auth.user.name} (${auth.user.provider_id})` : 'เข้าสู่ระบบ'}
                         >
