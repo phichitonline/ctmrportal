@@ -196,7 +196,7 @@ export default function Dashboard({
                                 <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold px-3 py-1 rounded-full flex items-center gap-2 shadow-2xs">
                                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
                                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 -ml-4.5"></span>
-                                    <span>Live Wazuh API Connected</span>
+                                    <span>Live CTMR API Connected</span>
                                 </span>
                             ) : (
                                 <span className="bg-amber-50 text-amber-800 border border-amber-300 font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
