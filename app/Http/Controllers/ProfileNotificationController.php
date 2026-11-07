@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Hospcode;
+use App\Models\SocShiftSchedule;
+use App\Models\SocTopic;
 use App\Models\User;
 use App\Services\MessagingNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,9 +25,9 @@ class ProfileNotificationController extends Controller
     }
 
     /**
-     * Show the user's profile and Telegram / LINE OA notification settings page.
+     * Show the user's profile, personal details, security status, and Telegram / LINE OA notification settings page.
      */
-    public function show(): Response
+    public function show(Request $request): Response
     {
         /** @var User $user */
         $user = Auth::user();
@@ -39,17 +43,73 @@ class ProfileNotificationController extends Controller
         $lineBotBasicId = trim((string) config('services.line.bot_basic_id', ''));
         $lineLiffId = trim((string) config('services.line.liff_id', ''));
 
+        // Load hospital / agency master list
+        $hospcodes = Hospcode::orderBy('hospcode')
+            ->get(['hospcode', 'name', 'hosptype'])
+            ->map(fn ($item) => [
+                'code' => $item->hospcode,
+                'hospcode' => $item->hospcode,
+                'name' => $item->name,
+                'type' => $item->hosptype ?? '',
+            ])
+            ->toArray();
+
+        if (empty($hospcodes)) {
+            $hospcodes = UserController::$agencies;
+        }
+
+        // User's SOC shift & report statistics
+        $upcomingShifts = SocShiftSchedule::where(function ($q) use ($user) {
+            $q->where('user_id', $user->id)
+                ->orWhere('backup_user_id', $user->id);
+        })
+            ->where('shift_date', '>=', Carbon::today()->toDateString())
+            ->orderBy('shift_date', 'asc')
+            ->limit(5)
+            ->get()
+            ->map(fn ($shift) => [
+                'id' => $shift->id,
+                'shift_date' => Carbon::parse($shift->shift_date)->format('d/m/Y'),
+                'shift_type' => $shift->shift_type,
+                'status' => $shift->status,
+                'is_primary' => $shift->user_id === $user->id,
+                'notes' => $shift->notes,
+            ]);
+
+        $totalShiftsCount = SocShiftSchedule::where('user_id', $user->id)
+            ->orWhere('backup_user_id', $user->id)
+            ->count();
+
+        $completedShiftsCount = SocShiftSchedule::where(function ($q) use ($user) {
+            $q->where('user_id', $user->id)
+                ->orWhere('backup_user_id', $user->id);
+        })->where('status', 'completed')->count();
+
+        $topicsCount = SocTopic::where('user_id', $user->id)->count();
+
         return Inertia::render('Profile/Notifications', [
+            'initialTab' => $request->query('tab', 'all'),
             'userProfile' => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'provider_id' => $user->provider_id,
+                'moph_id' => $user->moph_id,
+                'pid' => $user->pid,
                 'email' => $user->email,
                 'role' => $user->role,
+                'is_admin' => $user->isAdmin(),
                 'agency_code' => $user->hospcode ?: $user->agency_code,
                 'agency_name' => $user->hname_th ?: $user->agency_name,
-                'position' => $user->position,
-                'phone' => $user->phone,
+                'hospcode' => $user->hospcode ?: $user->agency_code,
+                'hname_th' => $user->hname_th ?: $user->agency_name,
+                'position' => $user->position ?? '',
+                'phone' => $user->phone ?? '',
+                'is_active' => $user->is_active,
+                'has_2fa' => $user->hasEnabledTwoFactor(),
+                'two_factor_confirmed_at' => $user->two_factor_confirmed_at?->format('d/m/Y H:i น.'),
+                'recovery_codes_count' => is_array($user->two_factor_recovery_codes) ? count($user->two_factor_recovery_codes) : 0,
+                'last_login_at' => $user->last_login_at?->format('d/m/Y H:i น.'),
+                'created_at' => $user->created_at?->format('d/m/Y'),
                 'telegram_chat_id' => $user->telegram_chat_id ?? '',
                 'telegram_username' => $user->telegram_username ?? '',
                 'telegram_linked_at' => $user->telegram_linked_at?->format('d/m/Y H:i น.'),
@@ -58,6 +118,13 @@ class ProfileNotificationController extends Controller
                 'line_linked_at' => $user->line_linked_at?->format('d/m/Y H:i น.'),
                 'notification_link_token' => $user->notification_link_token,
                 'notification_preferences' => $user->getNotificationPrefs(),
+            ],
+            'agencies' => $hospcodes,
+            'activitySummary' => [
+                'total_shifts' => $totalShiftsCount,
+                'completed_shifts' => $completedShiftsCount,
+                'topics_count' => $topicsCount,
+                'upcoming_shifts' => $upcomingShifts,
             ],
             'botConfig' => [
                 'telegram_configured' => $this->messagingService->isTelegramConfigured(),
@@ -363,7 +430,7 @@ class ProfileNotificationController extends Controller
     }
 
     /**
-     * Save or update user's Telegram Chat ID, LINE User ID, and notification preferences from Profile page.
+     * Save or update user's personal profile info, agency, Telegram Chat ID, LINE User ID, and notification preferences.
      */
     public function update(Request $request): RedirectResponse
     {
@@ -371,6 +438,9 @@ class ProfileNotificationController extends Controller
         $user = Auth::user();
 
         $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:255'],
+            'position' => ['nullable', 'string', 'max:255'],
+            'agency_code' => ['nullable', 'string', 'max:50'],
             'phone' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
             'telegram_chat_id' => ['nullable', 'string', 'max:100'],
@@ -378,10 +448,34 @@ class ProfileNotificationController extends Controller
             'line_user_id' => ['nullable', 'string', 'max:100'],
             'line_display_name' => ['nullable', 'string', 'max:150'],
             'preferences' => ['nullable', 'array'],
+        ], [
+            'email.email' => 'รูปแบบอีเมลไม่ถูกต้อง',
         ]);
 
-        $newTelegramId = trim((string) ($validated['telegram_chat_id'] ?? '')) ?: null;
-        $newLineId = trim((string) ($validated['line_user_id'] ?? '')) ?: null;
+        // Resolve agency name if agency_code was provided
+        $agencyCode = $user->hospcode ?: $user->agency_code;
+        $agencyName = $user->hname_th ?: $user->agency_name;
+
+        if (! empty($validated['agency_code'])) {
+            $agencyCode = trim($validated['agency_code']);
+            $hospcodeRecord = Hospcode::where('hospcode', $agencyCode)->first();
+            if ($hospcodeRecord) {
+                $agencyName = $hospcodeRecord->name;
+            } else {
+                $agencyMatch = collect(UserController::$agencies)->firstWhere('code', $agencyCode);
+                if ($agencyMatch) {
+                    $agencyName = $agencyMatch['name'];
+                }
+            }
+        }
+
+        $newTelegramId = array_key_exists('telegram_chat_id', $validated)
+            ? (trim((string) ($validated['telegram_chat_id'] ?? '')) ?: null)
+            : $user->telegram_chat_id;
+
+        $newLineId = array_key_exists('line_user_id', $validated)
+            ? (trim((string) ($validated['line_user_id'] ?? '')) ?: null)
+            : $user->line_user_id;
 
         $telegramLinkedAt = $user->telegram_linked_at;
         if ($newTelegramId && $newTelegramId !== $user->telegram_chat_id) {
@@ -398,15 +492,21 @@ class ProfileNotificationController extends Controller
         }
 
         $prefs = array_merge(
-            User::defaultNotificationPreferences(),
+            $user->getNotificationPrefs(),
             is_array($validated['preferences'] ?? null) ? $validated['preferences'] : []
         );
 
         $user->update([
-            'phone' => $validated['phone'] ?? $user->phone,
-            'email' => $validated['email'] ?? $user->email,
+            'name' => ! empty($validated['name']) ? trim($validated['name']) : $user->name,
+            'position' => array_key_exists('position', $validated) ? ($validated['position'] ? trim($validated['position']) : null) : $user->position,
+            'agency_code' => $agencyCode,
+            'agency_name' => $agencyName,
+            'hospcode' => $agencyCode,
+            'hname_th' => $agencyName,
+            'phone' => array_key_exists('phone', $validated) ? ($validated['phone'] ? trim($validated['phone']) : null) : $user->phone,
+            'email' => array_key_exists('email', $validated) ? ($validated['email'] ? trim($validated['email']) : null) : $user->email,
             'telegram_chat_id' => $newTelegramId,
-            'telegram_username' => $newTelegramId ? (trim((string) ($validated['telegram_username'] ?? '')) ?: $user->telegram_username) : null,
+            'telegram_username' => $newTelegramId ? (ltrim(trim((string) ($validated['telegram_username'] ?? '')), '@') ?: $user->telegram_username) : null,
             'telegram_linked_at' => $telegramLinkedAt,
             'line_user_id' => $newLineId,
             'line_display_name' => $newLineId ? (trim((string) ($validated['line_display_name'] ?? '')) ?: $user->line_display_name) : null,
@@ -414,7 +514,38 @@ class ProfileNotificationController extends Controller
             'notification_preferences' => $prefs,
         ]);
 
-        return back()->with('success', 'บันทึกข้อมูลการเชื่อมต่อ Telegram / LINE OA และการตั้งค่าการแจ้งเตือนเรียบร้อยแล้ว');
+        return back()->with('success', 'บันทึกข้อมูลส่วนตัวและการตั้งค่าการเชื่อมต่อโปรไฟล์เรียบร้อยแล้ว');
+    }
+
+    /**
+     * Update the authenticated user's password.
+     */
+    public function updatePassword(Request $request): RedirectResponse
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
+        ], [
+            'current_password.required' => 'กรุณากรอกรหัสผ่านปัจจุบันของคุณ',
+            'password.required' => 'กรุณากรอกรหัสผ่านใหม่ที่ต้องการตั้งค่า',
+            'password.min' => 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร',
+            'password.confirmed' => 'การยืนยันรหัสผ่านใหม่ไม่ตรงกัน',
+        ]);
+
+        if (! Hash::check($validated['current_password'], $user->password)) {
+            return back()->withErrors([
+                'current_password' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง',
+            ]);
+        }
+
+        $user->update([
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        return back()->with('success', 'เปลี่ยนรหัสผ่านเข้าสู่ระบบของคุณเรียบร้อยแล้ว');
     }
 
     /**

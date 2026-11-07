@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Log;
 
 class WazuhApiService
 {
+    protected string $dashboardUrl;
+    protected string $dashboardUsername;
+    protected string $dashboardPassword;
     protected string $baseUrl;
     protected string $username;
     protected string $password;
@@ -18,45 +21,90 @@ class WazuhApiService
     protected int $timeout;
     protected int $cacheTtl;
 
+    /**
+     * Exact mapping between the 13 Phichit Hospital codes (001-013) and their 5-digit MOPH Hospcodes
+     * used in Wazuh Agent groups (e.g., AA0000052, EA0010726, EA0011456).
+     */
+    protected static array $hospitalHospcodeMap = [
+        '001' => '00052', // สำนักงานสาธารณสุขจังหวัดพิจิตร
+        '002' => '10726', // โรงพยาบาลพิจิตร
+        '003' => '11456', // รพ.สมเด็จพระยุพราชตะพานหิน
+        '004' => '11260', // โรงพยาบาลบางมูลนาก
+        '005' => '11261', // โรงพยาบาลโพทะเล
+        '006' => '11263', // โรงพยาบาลทับคล้อ
+        '007' => '11259', // โรงพยาบาลโพธิ์ประทับช้าง
+        '008' => '11262', // โรงพยาบาลสามง่าม
+        '009' => '11631', // โรงพยาบาลวชิรบารมี
+        '010' => '11258', // โรงพยาบาลวังทรายพูน
+        '011' => '27978', // โรงพยาบาลสากเหล็ก
+        '012' => '27979', // โรงพยาบาลบึงนาราง
+        '013' => '27980', // โรงพยาบาลดงเจริญ
+    ];
+
     public function __construct()
     {
+        $this->dashboardUrl = rtrim(config('wazuh.dashboard_url', 'https://ctmr.ppho.go.th'), '/');
+        $this->dashboardUsername = (string) config('wazuh.dashboard_username', 'drghost');
+        $this->dashboardPassword = (string) config('wazuh.dashboard_password', '');
+
         $this->baseUrl = rtrim(config('wazuh.api_url', 'https://ctmr.ppho.go.th:55000'), '/');
-        $this->username = config('wazuh.username', 'wazuh');
-        $this->password = config('wazuh.password', '');
+        $this->username = (string) config('wazuh.username', 'wazuh-wui');
+        $this->password = (string) config('wazuh.password', '');
         $this->verifySsl = (bool) config('wazuh.verify_ssl', false);
-        $this->timeout = (int) config('wazuh.timeout', 6);
+        $this->timeout = (int) config('wazuh.timeout', 10);
         $this->cacheTtl = (int) config('wazuh.cache_ttl', 60);
     }
 
     /**
-     * Authenticate and retrieve JWT Bearer token from Wazuh REST API.
+     * Clear all cached Wazuh / OpenSearch tokens and datasets for immediate re-sync.
      */
-    public function getAuthToken(): ?string
+    public function clearSyncCache(): void
     {
-        if (empty($this->password)) {
+        Cache::forget('wazuh_jwt_token_' . md5($this->baseUrl . $this->dashboardUsername));
+        Cache::forget('wazuh_osd_cookie_' . md5($this->dashboardUrl . $this->dashboardUsername));
+        Cache::forget('wazuh_agents_summary_' . md5($this->baseUrl));
+        Cache::forget('wazuh_hospitals_breakdown_' . md5($this->baseUrl));
+        Cache::forget('wazuh_alerts_summary_' . md5($this->dashboardUrl));
+    }
+
+    /**
+     * Authenticate with OpenSearch Dashboards (https://ctmr.ppho.go.th/auth/login)
+     * and return the `security_authentication` cookie string.
+     */
+    public function getDashboardCookie(): ?string
+    {
+        if (empty($this->dashboardPassword)) {
             return null;
         }
 
-        $cacheKey = 'wazuh_jwt_token_' . md5($this->baseUrl . $this->username);
+        $cacheKey = 'wazuh_osd_cookie_' . md5($this->dashboardUrl . $this->dashboardUsername);
 
-        return Cache::remember($cacheKey, 800, function () {
+        return Cache::remember($cacheKey, 1800, function () {
             try {
-                $response = Http::withBasicAuth($this->username, $this->password)
+                $response = Http::withHeaders([
+                    'osd-xsrf' => 'true',
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ])
                     ->withOptions(['verify' => $this->verifySsl])
                     ->timeout($this->timeout)
-                    ->post("{$this->baseUrl}/security/user/authenticate");
+                    ->post("{$this->dashboardUrl}/auth/login", [
+                        'username' => $this->dashboardUsername,
+                        'password' => $this->dashboardPassword,
+                    ]);
 
                 if ($response->successful()) {
-                    $json = $response->json();
-                    return $json['data']['token'] ?? null;
-                }
+                    $setCookies = $response->header('Set-Cookie');
+                    $cookieHeaders = is_array($setCookies) ? $setCookies : [$setCookies];
 
-                Log::warning('Wazuh API authenticate failed', [
-                    'status' => $response->status(),
-                    'body' => $response->body(),
-                ]);
+                    foreach ($cookieHeaders as $hdr) {
+                        if (preg_match('/security_authentication=([^;]+)/', (string) $hdr, $matches)) {
+                            return 'security_authentication=' . $matches[1];
+                        }
+                    }
+                }
             } catch (Exception $e) {
-                Log::notice('Wazuh API unreachable: ' . $e->getMessage());
+                Log::notice('Wazuh Dashboard login unreachable: ' . $e->getMessage());
             }
 
             return null;
@@ -64,37 +112,98 @@ class WazuhApiService
     }
 
     /**
-     * Get overall connection and sync status.
+     * Authenticate and retrieve JWT Bearer token for Wazuh Manager REST API (Port 55000).
+     * First exchanges the OpenSearch Dashboards session cookie via `POST /api/login` (`{"idHost":"default"}`),
+     * or falls back to direct Basic Auth on Port 55000.
+     */
+    public function getAuthToken(): ?string
+    {
+        $cacheKey = 'wazuh_jwt_token_' . md5($this->baseUrl . $this->dashboardUsername);
+
+        return Cache::remember($cacheKey, 800, function () {
+            // 1. Exchange OpenSearch Dashboards session cookie via POST /api/login
+            $osdCookie = $this->getDashboardCookie();
+            if ($osdCookie) {
+                try {
+                    $wzLoginRes = Http::withHeaders([
+                        'osd-xsrf' => 'true',
+                        'Cookie' => $osdCookie,
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                    ])
+                        ->withOptions(['verify' => $this->verifySsl])
+                        ->timeout($this->timeout)
+                        ->post("{$this->dashboardUrl}/api/login", [
+                            'idHost' => 'default',
+                            'force' => true,
+                        ]);
+
+                    if ($wzLoginRes->successful()) {
+                        $token = $wzLoginRes->json()['token'] ?? null;
+                        if (! empty($token)) {
+                            return $token;
+                        }
+                    }
+                } catch (Exception $e) {
+                    Log::notice('Wazuh /api/login token exchange failed: ' . $e->getMessage());
+                }
+            }
+
+            // 2. Fallback: Direct Basic Auth to Port 55000 /security/user/authenticate
+            if (! empty($this->password)) {
+                try {
+                    $response = Http::withBasicAuth($this->username, $this->password)
+                        ->withOptions(['verify' => $this->verifySsl])
+                        ->timeout($this->timeout)
+                        ->post("{$this->baseUrl}/security/user/authenticate");
+
+                    if ($response->successful()) {
+                        $json = $response->json();
+
+                        return $json['data']['token'] ?? null;
+                    }
+                } catch (Exception $e) {
+                    Log::notice('Wazuh API port 55000 unreachable: ' . $e->getMessage());
+                }
+            }
+
+            return null;
+        });
+    }
+
+    /**
+     * Get overall connection and sync status across both Port 443 (Dashboard) and Port 55000 (API).
      */
     public function getConnectionStatus(): array
     {
-        $token = $this->getAuthToken();
-        $isLive = !empty($token);
+        $osdCookie = $this->getDashboardCookie();
+        $jwtToken = $this->getAuthToken();
+        $isLive = ! empty($jwtToken) || ! empty($osdCookie);
 
         return [
             'is_live' => $isLive,
+            'api_connected' => ! empty($jwtToken),
+            'dashboard_connected' => ! empty($osdCookie),
             'mode' => $isLive ? 'live' : 'simulated',
+            'dashboard_url' => $this->dashboardUrl,
             'api_url' => $this->baseUrl,
-            'node_name' => 'ctmr-phichit (Wazuh Manager)',
+            'node_name' => 'ctmr-phichit (Wazuh v4.12.0 / OpenSearch v2.19.1)',
             'last_sync' => Carbon::now()->timezone('Asia/Bangkok')->format('H:i:s'),
             'message' => $isLive
-                ? 'เชื่อมต่อ Wazuh REST API เซิร์ฟเวอร์จริงสำเร็จ (Live Data Sync)'
-                : (empty($this->password)
-                    ? 'โหมดจำลอง (Simulated Node): รอการกำหนดรหัสผ่าน WAZUH_API_PASSWORD ในไฟล์ .env'
-                    : 'โหมดจำลอง (Fallback Mode): เซิร์ฟเวอร์ Wazuh ภายนอกไม่สามารถยืนยันตัวตนได้ในขณะนี้'),
+                ? "เชื่อมต่อ ctmr.ppho.go.th สำเร็จ (ผู้ใช้: {$this->dashboardUsername} • Live SIEM & Agents Sync)"
+                : 'โหมดสำรองข้อมูล (Fallback Standby): รอการตรวจสอบสิทธิ์เข้าถึง ctmr.ppho.go.th',
         ];
     }
 
     /**
-     * Get overall Agents status summary.
+     * Get overall Agents status summary from `https://ctmr.ppho.go.th:55000/agents/summary/status`.
      */
     public function getAgentsSummary(): array
     {
+        $cacheKey = 'wazuh_agents_summary_' . md5($this->baseUrl);
         $token = $this->getAuthToken();
 
         if ($token) {
-            $cacheKey = 'wazuh_agents_summary_' . md5($this->baseUrl);
-
             $cached = Cache::remember($cacheKey, $this->cacheTtl, function () use ($token) {
                 try {
                     $response = Http::withToken($token)
@@ -103,27 +212,30 @@ class WazuhApiService
                         ->get("{$this->baseUrl}/agents/summary/status");
 
                     if ($response->successful()) {
-                        $data = $response->json()['data'] ?? [];
-                        $total = (int) ($data['total'] ?? 0);
-                        $active = (int) ($data['active'] ?? 0);
-                        $disconnected = (int) ($data['disconnected'] ?? 0);
-                        $neverConnected = (int) ($data['never_connected'] ?? 0);
-                        $pending = (int) ($data['pending'] ?? 0);
-                        $coverage = $total > 0 ? round(($active / $total) * 100, 1) : 0;
+                        $data = $response->json()['data']['connection'] ?? ($response->json()['data'] ?? []);
+                        if (! empty($data) && isset($data['total'])) {
+                            $total = (int) ($data['total'] ?? 0);
+                            $active = (int) ($data['active'] ?? 0);
+                            $disconnected = (int) ($data['disconnected'] ?? 0);
+                            $neverConnected = (int) ($data['never_connected'] ?? 0);
+                            $pending = (int) ($data['pending'] ?? 0);
+                            $coverage = $total > 0 ? round(($active / $total) * 100, 1) : 0;
 
-                        return [
-                            'total' => $total,
-                            'active' => $active,
-                            'disconnected' => $disconnected,
-                            'never_connected' => $neverConnected,
-                            'pending' => $pending,
-                            'coverage_percent' => $coverage,
-                            'source' => 'live',
-                        ];
+                            return [
+                                'total' => $total,
+                                'active' => $active,
+                                'disconnected' => $disconnected,
+                                'never_connected' => $neverConnected,
+                                'pending' => $pending,
+                                'coverage_percent' => $coverage,
+                                'source' => 'live',
+                            ];
+                        }
                     }
                 } catch (Exception $e) {
                     Log::warning('Error fetching live agents summary: ' . $e->getMessage());
                 }
+
                 return null;
             });
 
@@ -132,27 +244,25 @@ class WazuhApiService
             }
         }
 
-        // Realistic Fallback Dataset
         return [
-            'total' => 613,
-            'active' => 418,
-            'disconnected' => 195,
+            'total' => 647,
+            'active' => 266,
+            'disconnected' => 377,
             'never_connected' => 0,
-            'pending' => 0,
-            'coverage_percent' => 68.2,
+            'pending' => 4,
+            'coverage_percent' => 41.1,
             'source' => 'simulated',
         ];
     }
 
     /**
-     * Get breakdown of agents across the 13 hospitals in Phichit Province.
+     * Get breakdown of agents across the 13 hospitals in Phichit Province from live Wazuh API.
      */
     public function getHospitalAgentsBreakdown(): array
     {
         $token = $this->getAuthToken();
         $agencies = UserController::$agencies;
 
-        // Try live agents mapping if live token is available
         if ($token) {
             $cacheKey = 'wazuh_hospitals_breakdown_' . md5($this->baseUrl);
             $cached = Cache::remember($cacheKey, $this->cacheTtl, function () use ($token, $agencies) {
@@ -167,13 +277,14 @@ class WazuhApiService
 
                     if ($response->successful()) {
                         $agents = $response->json()['data']['affected_items'] ?? [];
-                        if (!empty($agents)) {
+                        if (! empty($agents)) {
                             return $this->mapLiveAgentsToHospitals($agents, $agencies);
                         }
                     }
                 } catch (Exception $e) {
                     Log::warning('Error fetching live agents list: ' . $e->getMessage());
                 }
+
                 return null;
             });
 
@@ -182,27 +293,28 @@ class WazuhApiService
             }
         }
 
-        // Standardized Baseline distribution across 13 Phichit Hospitals (Sum: 613 Total, 418 Active, 195 Disconnected)
+        // Standardized Baseline distribution across 13 Phichit Hospitals
         $simulatedMatrix = [
-            '001' => ['total' => 68, 'active' => 52, 'disconnected' => 16, 'subnet' => '192.168.1.0/24', 'os' => 'Linux (Debian/Ubuntu) & Windows Server'],
-            '002' => ['total' => 145, 'active' => 102, 'disconnected' => 43, 'subnet' => '192.168.10.0/23', 'os' => 'Windows Server 2022 / Rocky Linux 9'],
-            '003' => ['total' => 85, 'active' => 59, 'disconnected' => 26, 'subnet' => '192.168.20.0/24', 'os' => 'Rocky Linux 8 / Windows 10/11'],
-            '004' => ['total' => 54, 'active' => 38, 'disconnected' => 16, 'subnet' => '192.168.30.0/24', 'os' => 'CentOS 7 / Windows Server 2019'],
-            '005' => ['total' => 42, 'active' => 28, 'disconnected' => 14, 'subnet' => '192.168.40.0/24', 'os' => 'Ubuntu 22.04 LTS / Windows 10'],
-            '006' => ['total' => 38, 'active' => 26, 'disconnected' => 12, 'subnet' => '192.168.50.0/24', 'os' => 'Debian 11 / Windows Server 2016'],
-            '007' => ['total' => 32, 'active' => 22, 'disconnected' => 10, 'subnet' => '192.168.60.0/24', 'os' => 'Rocky Linux 9 / Windows 10'],
-            '008' => ['total' => 28, 'active' => 19, 'disconnected' => 9, 'subnet' => '192.168.70.0/24', 'os' => 'Windows Server / Ubuntu'],
-            '009' => ['total' => 26, 'active' => 18, 'disconnected' => 8, 'subnet' => '192.168.80.0/24', 'os' => 'Linux / Windows Desktop'],
-            '010' => ['total' => 24, 'active' => 16, 'disconnected' => 8, 'subnet' => '192.168.90.0/24', 'os' => 'CentOS / Windows Server'],
-            '011' => ['total' => 24, 'active' => 15, 'disconnected' => 9, 'subnet' => '192.168.100.0/24', 'os' => 'Ubuntu / Windows 11'],
-            '012' => ['total' => 24, 'active' => 16, 'disconnected' => 8, 'subnet' => '192.168.110.0/24', 'os' => 'Rocky Linux / Windows 10'],
-            '013' => ['total' => 23, 'active' => 7, 'disconnected' => 16, 'subnet' => '192.168.120.0/24', 'os' => 'Debian / Windows Server'],
+            '001' => ['total' => 63, 'active' => 30, 'disconnected' => 33, 'subnet' => '10.0.0.0/24', 'os' => 'Windows 10/11 & Ubuntu 22.04'],
+            '002' => ['total' => 48, 'active' => 24, 'disconnected' => 24, 'subnet' => '192.168.10.0/24', 'os' => 'Windows Server / Linux'],
+            '003' => ['total' => 76, 'active' => 38, 'disconnected' => 38, 'subnet' => '172.16.10.0/24', 'os' => 'Windows 10/11 & Windows Server'],
+            '004' => ['total' => 34, 'active' => 18, 'disconnected' => 16, 'subnet' => '192.168.30.0/24', 'os' => 'CentOS / Windows'],
+            '005' => ['total' => 8, 'active' => 5, 'disconnected' => 3, 'subnet' => '192.168.40.0/24', 'os' => 'Ubuntu / Windows'],
+            '006' => ['total' => 31, 'active' => 16, 'disconnected' => 15, 'subnet' => '192.168.50.0/24', 'os' => 'Debian / Windows'],
+            '007' => ['total' => 39, 'active' => 20, 'disconnected' => 19, 'subnet' => '192.168.60.0/24', 'os' => 'Linux / Windows'],
+            '008' => ['total' => 9, 'active' => 5, 'disconnected' => 4, 'subnet' => '192.168.70.0/24', 'os' => 'Windows / Ubuntu'],
+            '009' => ['total' => 11, 'active' => 6, 'disconnected' => 5, 'subnet' => '192.168.80.0/24', 'os' => 'Linux / Windows'],
+            '010' => ['total' => 41, 'active' => 21, 'disconnected' => 20, 'subnet' => '192.168.90.0/24', 'os' => 'CentOS / Windows'],
+            '011' => ['total' => 7, 'active' => 4, 'disconnected' => 3, 'subnet' => '192.168.100.0/24', 'os' => 'Ubuntu / Windows'],
+            '012' => ['total' => 31, 'active' => 16, 'disconnected' => 15, 'subnet' => '192.168.110.0/24', 'os' => 'Linux / Windows'],
+            '013' => ['total' => 19, 'active' => 9, 'disconnected' => 10, 'subnet' => '192.168.120.0/24', 'os' => 'Debian / Windows'],
         ];
 
         $hospitals = [];
 
         foreach ($agencies as $agency) {
             $code = $agency['code'];
+            $hospcode = self::$hospitalHospcodeMap[$code] ?? $code;
             $meta = $simulatedMatrix[$code] ?? ['total' => 20, 'active' => 15, 'disconnected' => 5, 'subnet' => '192.168.x.x', 'os' => 'General OS'];
             $total = $meta['total'];
             $active = $meta['active'];
@@ -218,13 +330,14 @@ class WazuhApiService
 
             $hospitals[] = [
                 'code' => $code,
+                'hospcode' => $hospcode,
                 'name' => $agency['name'],
-                'type' => $agency['type'],
+                'type' => $agency['type'] . " • รหัส {$hospcode}",
                 'total' => $total,
                 'active' => $active,
                 'disconnected' => $disconnected,
                 'health_score' => $health,
-                'status_level' => $statusLevel, // healthy, warning, critical
+                'status_level' => $statusLevel,
                 'subnet' => $meta['subnet'],
                 'os_primary' => $meta['os'],
             ];
@@ -234,7 +347,8 @@ class WazuhApiService
     }
 
     /**
-     * Map live raw agents to 13 hospitals.
+     * Map live raw agents from `https://ctmr.ppho.go.th:55000/agents` to the 13 Phichit hospitals
+     * using their 5-digit MOPH Hospcode (`AA0000052`, `EA0010726`, `EA0011456`, etc.).
      */
     protected function mapLiveAgentsToHospitals(array $agents, array $agencies): array
     {
@@ -242,28 +356,46 @@ class WazuhApiService
         $buckets = [];
 
         foreach ($agencies as $agency) {
-            $buckets[$agency['code']] = [
-                'code' => $agency['code'],
+            $code = $agency['code'];
+            $hospcode = self::$hospitalHospcodeMap[$code] ?? $code;
+            $buckets[$code] = [
+                'code' => $code,
+                'hospcode' => $hospcode,
                 'name' => $agency['name'],
-                'type' => $agency['type'],
+                'type' => $agency['type'] . " • รหัส {$hospcode}",
                 'total' => 0,
                 'active' => 0,
                 'disconnected' => 0,
                 'subnet' => '-',
-                'os_primary' => 'Detected Nodes',
+                'os_primary' => '-',
+                'os_counts' => [],
             ];
         }
 
         foreach ($agents as $agent) {
-            $matchedCode = '001'; // default PPHO
-            $name = strtolower($agent['name'] ?? '');
-            $group = is_array($agent['group'] ?? null) ? implode(' ', $agent['group']) : ($agent['group'] ?? '');
+            if (($agent['id'] ?? '') === '000') {
+                continue;
+            }
 
-            foreach ($agencies as $agency) {
-                $code = $agency['code'];
-                if (str_contains($name, $code) || str_contains(strtolower($group), $code)) {
+            $matchedCode = null;
+            $name = strtoupper((string) ($agent['name'] ?? ''));
+            $groupList = is_array($agent['group'] ?? null) ? $agent['group'] : [];
+            $groupStr = strtoupper(implode(' ', $groupList));
+
+            // Match by exact 5-digit hospcode in group or agent name (e.g. EA0011456 -> 11456 -> 003)
+            foreach (self::$hospitalHospcodeMap as $code => $hospcode) {
+                if (str_contains($groupStr, $hospcode) || str_contains($name, $hospcode)) {
                     $matchedCode = $code;
                     break;
+                }
+            }
+
+            // If it's a PCU / รพ.สต. in Phichit (e.g. GA0007... with PHICHIT group) and not matched to one of the 12 hospitals, attribute to 001 (สสจ.พิจิตร / เครือข่าย รพ.สต.)
+            if (! $matchedCode) {
+                if (str_contains($groupStr, 'PHICHIT')) {
+                    $matchedCode = '001';
+                } else {
+                    continue;
                 }
             }
 
@@ -272,6 +404,15 @@ class WazuhApiService
                 $buckets[$matchedCode]['active']++;
             } else {
                 $buckets[$matchedCode]['disconnected']++;
+            }
+
+            if (! empty($agent['ip']) && $agent['ip'] !== 'any' && $buckets[$matchedCode]['subnet'] === '-') {
+                $buckets[$matchedCode]['subnet'] = $agent['ip'];
+            }
+
+            $osName = $agent['os']['name'] ?? null;
+            if (! empty($osName)) {
+                $buckets[$matchedCode]['os_counts'][$osName] = ($buckets[$matchedCode]['os_counts'][$osName] ?? 0) + 1;
             }
         }
 
@@ -287,6 +428,15 @@ class WazuhApiService
                 $statusLevel = 'warning';
             }
 
+            if (! empty($data['os_counts'])) {
+                arsort($data['os_counts']);
+                $topOs = array_slice(array_keys($data['os_counts']), 0, 2);
+                $data['os_primary'] = implode(' / ', $topOs);
+            } else {
+                $data['os_primary'] = 'Windows / Linux Nodes';
+            }
+
+            unset($data['os_counts']);
             $data['health_score'] = $health;
             $data['status_level'] = $statusLevel;
             $hospitals[] = $data;
@@ -296,33 +446,239 @@ class WazuhApiService
     }
 
     /**
-     * Threat severity alerts summary (Critical, High, Medium, Low).
+     * Fetch 24-hour Threat Severity Alerts Summary, Top Rule Groups, and Recent Security Events
+     * from `https://ctmr.ppho.go.th` OpenSearch Indexer (`wazuh-alerts-*`).
      */
     public function getAlertsSummary(): array
     {
+        $osdCookie = $this->getDashboardCookie();
+
+        if ($osdCookie) {
+            $cacheKey = 'wazuh_alerts_summary_' . md5($this->dashboardUrl);
+            $cached = Cache::remember($cacheKey, $this->cacheTtl, function () use ($osdCookie) {
+                try {
+                    // 1. Aggregation + Recent High/Medium Events Query (rule.level >= 5)
+                    $queryPayload = [
+                        'size' => 8,
+                        'sort' => [
+                            ['timestamp' => ['order' => 'desc']],
+                        ],
+                        'query' => [
+                            'bool' => [
+                                'filter' => [
+                                    [
+                                        'range' => [
+                                            'timestamp' => [
+                                                'gte' => 'now-24h',
+                                                'lte' => 'now',
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                        'aggs' => [
+                            'severity_ranges' => [
+                                'range' => [
+                                    'field' => 'rule.level',
+                                    'ranges' => [
+                                        ['key' => 'low', 'from' => 0, 'to' => 7],
+                                        ['key' => 'medium', 'from' => 7, 'to' => 12],
+                                        ['key' => 'high', 'from' => 12, 'to' => 15],
+                                        ['key' => 'critical', 'from' => 15],
+                                    ],
+                                ],
+                            ],
+                            'top_groups' => [
+                                'terms' => [
+                                    'field' => 'rule.groups',
+                                    'size' => 4,
+                                ],
+                            ],
+                            'high_priority_hits' => [
+                                'filter' => [
+                                    'range' => [
+                                        'rule.level' => ['gte' => 10],
+                                    ],
+                                ],
+                                'aggs' => [
+                                    'top_high_hits' => [
+                                        'top_hits' => [
+                                            'size' => 6,
+                                            'sort' => [
+                                                ['timestamp' => ['order' => 'desc']],
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ];
+
+                    $response = Http::withHeaders([
+                        'osd-xsrf' => 'true',
+                        'Cookie' => $osdCookie,
+                        'Content-Type' => 'application/json',
+                    ])
+                        ->withOptions(['verify' => $this->verifySsl])
+                        ->timeout($this->timeout)
+                        ->post(
+                            "{$this->dashboardUrl}/api/console/proxy?path=" . urlencode('wazuh-alerts-*/_search') . '&method=POST',
+                            $queryPayload
+                        );
+
+                    if ($response->successful()) {
+                        $json = $response->json();
+                        $buckets = collect($json['aggregations']['severity_ranges']['buckets'] ?? [])->keyBy('key');
+
+                        $criticalCount = (int) ($buckets['critical']['doc_count'] ?? 0);
+                        $highCount = (int) ($buckets['high']['doc_count'] ?? 0);
+                        $mediumCount = (int) ($buckets['medium']['doc_count'] ?? 0);
+                        $lowCount = (int) ($buckets['low']['doc_count'] ?? 0);
+                        $total24h = $criticalCount + $highCount + $mediumCount + $lowCount;
+
+                        // Parse Top Rule Groups
+                        $groupBuckets = $json['aggregations']['top_groups']['buckets'] ?? [];
+                        $groupSum = collect($groupBuckets)->sum('doc_count') ?: 1;
+                        $categories = [];
+                        foreach ($groupBuckets as $gb) {
+                            $cnt = (int) ($gb['doc_count'] ?? 0);
+                            $categories[] = [
+                                'name' => strtoupper((string) ($gb['key'] ?? 'Security Rule')),
+                                'count' => number_format($cnt),
+                                'share' => round(($cnt / $groupSum) * 100, 1) . '%',
+                            ];
+                        }
+
+                        // Prefer High Priority Hits (rule.level >= 10), fallback to latest general hits
+                        $highHits = $json['aggregations']['high_priority_hits']['top_high_hits']['hits']['hits'] ?? [];
+                        $generalHits = $json['hits']['hits'] ?? [];
+                        $mergedHits = ! empty($highHits) ? array_merge($highHits, $generalHits) : $generalHits;
+
+                        $recentEvents = [];
+                        $seenIds = [];
+                        foreach ($mergedHits as $hit) {
+                            $hitId = $hit['_id'] ?? uniqid('evt_');
+                            if (isset($seenIds[$hitId])) {
+                                continue;
+                            }
+                            $seenIds[$hitId] = true;
+
+                            $src = $hit['_source'] ?? [];
+                            $recentEvents[] = [
+                                'id' => $hitId,
+                                'timestamp' => isset($src['timestamp'])
+                                    ? Carbon::parse($src['timestamp'])->timezone('Asia/Bangkok')->format('d/m H:i:s')
+                                    : Carbon::now()->format('d/m H:i:s'),
+                                'agent_name' => $src['agent']['name'] ?? 'ctmr-node',
+                                'agent_ip' => $src['agent']['ip'] ?? ($src['data']['srcip'] ?? '127.0.0.1'),
+                                'rule_id' => $src['rule']['id'] ?? '-',
+                                'rule_level' => (int) ($src['rule']['level'] ?? 3),
+                                'description' => $src['rule']['description'] ?? 'Security event detected',
+                                'mitre_id' => $src['rule']['mitre']['id'][0] ?? null,
+                                'mitre_tactic' => $src['rule']['mitre']['tactic'][0] ?? null,
+                            ];
+
+                            if (count($recentEvents) >= 6) {
+                                break;
+                            }
+                        }
+
+                        return $this->buildAlertsSummaryStructure(
+                            $criticalCount,
+                            $highCount,
+                            $mediumCount,
+                            $lowCount,
+                            $total24h,
+                            $categories,
+                            $recentEvents,
+                            'live'
+                        );
+                    }
+                } catch (Exception $e) {
+                    Log::warning('Error querying OpenSearch alerts on ctmr.ppho.go.th: ' . $e->getMessage());
+                }
+
+                return null;
+            });
+
+            if ($cached) {
+                return $cached;
+            }
+        }
+
+        // Standardized Fallback Dataset
+        $fallbackCategories = [
+            ['name' => 'AUDIT / SELINUX', 'count' => '3,730,285', 'share' => '49.1%'],
+            ['name' => 'WINDOWS APPLICATION', 'count' => '1,126,303', 'share' => '29.8%'],
+            ['name' => 'SYSTEM ERROR', 'count' => '676,276', 'share' => '13.3%'],
+            ['name' => 'WINDOWS SECURITY', 'count' => '294,365', 'share' => '7.8%'],
+        ];
+
+        $now = Carbon::now()->timezone('Asia/Bangkok');
+        $fallbackRecentEvents = [
+            [
+                'id' => 'evt-101',
+                'timestamp' => $now->copy()->subMinutes(4)->format('d/m H:i:s'),
+                'agent_name' => 'ctmr-phichit',
+                'agent_ip' => '109.160.32.152',
+                'rule_id' => '5710',
+                'rule_level' => 5,
+                'description' => 'sshd: Attempt to login using a non-existent user',
+                'mitre_id' => 'T1110.001',
+                'mitre_tactic' => 'Credential Access',
+            ],
+        ];
+
+        return $this->buildAlertsSummaryStructure(
+            0,
+            591,
+            918026,
+            4208070,
+            5126687,
+            $fallbackCategories,
+            $fallbackRecentEvents,
+            'simulated'
+        );
+    }
+
+    /**
+     * Format the standardized alerts summary structure for Dashboard.jsx.
+     */
+    protected function buildAlertsSummaryStructure(
+        int $critical,
+        int $high,
+        int $medium,
+        int $low,
+        int $total24h,
+        array $categories,
+        array $recentEvents,
+        string $source = 'simulated'
+    ): array {
         return [
-            'critical' => 0,
-            'high' => 291,
-            'medium' => '1,098,468',
-            'low' => '896,603',
-            'total_24h' => '1,995,362',
+            'source' => $source,
+            'critical' => number_format($critical),
+            'high' => number_format($high),
+            'medium' => number_format($medium),
+            'low' => number_format($low),
+            'total_24h' => number_format($total24h),
             'period' => '24 ชั่วโมงที่ผ่านมา',
             'severity_levels' => [
                 [
                     'id' => 'critical',
                     'label' => 'Critical severity',
                     'sub' => 'Rule level 15 or higher',
-                    'count' => 0,
+                    'count' => number_format($critical),
                     'color' => '#BD271E',
                     'accent' => 'rose',
-                    'badge' => 'ไม่มีภัยคุกคามรุนแรง',
+                    'badge' => $critical > 0 ? 'พบภัยคุกคามวิกฤต ต้องตรวจสอบทันที' : 'ไม่มีภัยคุกคามรุนแรง',
                     'icon' => '🚨',
                 ],
                 [
                     'id' => 'high',
                     'label' => 'High severity',
                     'sub' => 'Rule level 12 to 14',
-                    'count' => 291,
+                    'count' => number_format($high),
                     'color' => '#FEC514',
                     'accent' => 'amber',
                     'badge' => 'ตรวจพบและระงับเหตุแล้ว',
@@ -332,7 +688,7 @@ class WazuhApiService
                     'id' => 'medium',
                     'label' => 'Medium severity',
                     'sub' => 'Rule level 7 to 11',
-                    'count' => '1,098,468',
+                    'count' => number_format($medium),
                     'color' => '#6092C0',
                     'accent' => 'sky',
                     'badge' => 'วิเคราะห์และจัดเก็บ Log',
@@ -342,19 +698,15 @@ class WazuhApiService
                     'id' => 'low',
                     'label' => 'Low severity',
                     'sub' => 'Rule level 0 to 6',
-                    'count' => '896,603',
+                    'count' => number_format($low),
                     'color' => '#007871',
                     'accent' => 'emerald',
                     'badge' => 'บันทึกพฤติกรรมระบบทั่วไป',
                     'icon' => '🟢',
                 ],
             ],
-            'categories' => [
-                ['name' => 'Authentication & Brute Force', 'count' => 142, 'share' => '48.8%'],
-                ['name' => 'File Integrity Monitoring (FIM)', 'count' => 86, 'share' => '29.5%'],
-                ['name' => 'Network Port Scan & Recon', 'count' => 45, 'share' => '15.5%'],
-                ['name' => 'System Policy & CIS Audit', 'count' => 18, 'share' => '6.2%'],
-            ],
+            'categories' => $categories,
+            'recent_events' => $recentEvents,
         ];
     }
 }

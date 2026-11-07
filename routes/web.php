@@ -99,18 +99,28 @@ Route::middleware('auth')->group(function () {
     Route::delete('/security/two-factor', [TwoFactorAuthController::class, 'disable'])->name('two-factor.disable');
     Route::post('/security/two-factor/recovery-codes', [TwoFactorAuthController::class, 'regenerateRecoveryCodes'])->name('two-factor.recovery-codes');
 
-    // User Profile & Telegram / LINE OA Notification Settings
+    // User Profile Center & Telegram / LINE OA Notification Settings
+    Route::prefix('profile')->name('profile.')->group(function () {
+        Route::get('/', [ProfileNotificationController::class, 'show'])->name('show');
+        Route::put('/', [ProfileNotificationController::class, 'update'])->name('update');
+        Route::put('/password', [ProfileNotificationController::class, 'updatePassword'])->name('password');
+    });
+
     Route::prefix('profile/notifications')->name('profile.notifications.')->group(function () {
         Route::get('/', [ProfileNotificationController::class, 'show'])->name('show');
         Route::put('/', [ProfileNotificationController::class, 'update'])->name('update');
+        Route::put('/password', [ProfileNotificationController::class, 'updatePassword'])->name('password');
         Route::post('/regenerate-token', [ProfileNotificationController::class, 'regenerateToken'])->name('regenerate-token');
         Route::post('/sync-telegram', [ProfileNotificationController::class, 'syncTelegram'])->name('sync-telegram');
         Route::delete('/unlink/{channel}', [ProfileNotificationController::class, 'unlinkChannel'])->name('unlink');
         Route::post('/test/{channel}', [ProfileNotificationController::class, 'sendTestNotification'])->name('test');
     });
 
-    // Admin-only User Management
+    // Admin-only User & Team Management
     Route::middleware('admin')->group(function () {
+        Route::put('/team/{user}', [TeamController::class, 'updateMember'])->name('team.update');
+        Route::post('/team/assign-group', [TeamController::class, 'assignGroupMembers'])->name('team.assign-group');
+
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');

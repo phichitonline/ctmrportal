@@ -26,6 +26,11 @@ class User extends Authenticatable
         'agency_name',
         'position',
         'phone',
+        'team_groups',
+        'team_role_badge',
+        'team_responsibilities',
+        'team_skills',
+        'team_nodes',
         'telegram_chat_id',
         'telegram_username',
         'telegram_linked_at',
@@ -64,6 +69,42 @@ class User extends Authenticatable
             'telegram_linked_at' => 'datetime',
             'line_linked_at' => 'datetime',
             'notification_preferences' => 'array',
+            'team_groups' => 'array',
+            'team_skills' => 'array',
+        ];
+    }
+
+    public static function teamGroupDefinitions(): array
+    {
+        return [
+            'soc' => [
+                'key' => 'soc',
+                'label' => 'SOC & Threat Detection',
+                'shortLabel' => 'SOC & Threat',
+                'color' => 'sky',
+                'description' => 'มอนิเตอร์เหตุการณ์ Wazuh SIEM, วิเคราะห์ภัยคุกคาม Threat Hunting และตอบสนองเหตุฉุกเฉิน',
+            ],
+            'network' => [
+                'key' => 'network',
+                'label' => 'Network & Infrastructure',
+                'shortLabel' => 'Network & Infra',
+                'color' => 'indigo',
+                'description' => 'ดูแลระบบเครือข่ายส่วนกลาง Firewall, VPN ระหว่างโรงพยาบาล และโครงสร้างพื้นฐานคลาวด์ HDC',
+            ],
+            'his' => [
+                'key' => 'his',
+                'label' => 'HOSxP / Database Security',
+                'shortLabel' => 'HOSxP / DB Sec',
+                'color' => 'amber',
+                'description' => 'ดูแลความมั่นคงปลอดภัยฐานข้อมูล HOSxP / JHCIS, ป้องกัน SQL Injection และระบบสำรองข้อมูล',
+            ],
+            'pdpa' => [
+                'key' => 'pdpa',
+                'label' => 'PDPA & Compliance',
+                'shortLabel' => 'PDPA & Compliance',
+                'color' => 'rose',
+                'description' => 'กำกับดูแลการคุ้มครองข้อมูลส่วนบุคคล (PDPA), สิทธิการเข้าถึงเวชระเบียน และธรรมาภิบาลข้อมูล',
+            ],
         ];
     }
 

@@ -304,6 +304,8 @@ class DashboardController extends Controller
      */
     public function syncLive(): JsonResponse
     {
+        $this->wazuhService->clearSyncCache();
+
         $agentsSummary = $this->wazuhService->getAgentsSummary();
         $hospitalsAgents = $this->wazuhService->getHospitalAgentsBreakdown();
         $alertsSummary = $this->wazuhService->getAlertsSummary();

@@ -188,6 +188,70 @@ export default function Dashboard({
                 <div className="space-y-6 max-w-[1720px] mx-auto pb-10">
                     <Head title="SOC Executive Dashboard - CTMR R3 Phichit" />
 
+                    {/* LIVE API CONNECTION STATUS & COMMAND BAR */}
+                    <div className="bg-white border border-[#D3DAE6] rounded-xl px-5 py-3 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-3 text-xs">
+                            {/* Live Badge */}
+                            {connectionStatus.is_live ? (
+                                <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold px-3 py-1 rounded-full flex items-center gap-2 shadow-2xs">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 -ml-4.5"></span>
+                                    <span>Live Wazuh API Connected</span>
+                                </span>
+                            ) : (
+                                <span className="bg-amber-50 text-amber-800 border border-amber-300 font-bold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
+                                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                    <span>Simulated / Fallback Standby</span>
+                                </span>
+                            )}
+
+                            <span className="text-slate-300 hidden sm:inline">•</span>
+
+                            <div className="flex items-center gap-1.5 text-slate-600">
+                                <span className="font-semibold text-slate-700">CTMR Dashboard:</span>
+                                <a
+                                    href={connectionStatus.dashboard_url || 'https://ctmr.ppho.go.th'}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="bg-sky-50 hover:bg-sky-100 text-[#006BB4] border border-sky-200 px-2 py-0.5 rounded font-mono text-[11px] font-semibold transition"
+                                >
+                                    {connectionStatus.dashboard_url || 'https://ctmr.ppho.go.th'} ↗
+                                </a>
+                                <code className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono text-[11px] hidden xl:inline">
+                                    API: {connectionStatus.api_url}
+                                </code>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0 text-xs">
+                            <span className="text-slate-500">
+                                ซิงค์ล่าสุด: <strong>{syncTime || lastUpdated} น.</strong>
+                            </span>
+
+                            <button
+                                onClick={handleSync}
+                                disabled={isSyncing}
+                                className="bg-[#006BB4] hover:bg-[#005590] text-white font-bold px-3.5 py-1.5 rounded-lg shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                title="ดึงข้อมูลสดล่าสุดจาก Wazuh API"
+                            >
+                                <svg
+                                    className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                    />
+                                </svg>
+                                <span>{isSyncing ? 'กำลังซิงค์...' : 'Refresh Sync'}</span>
+                            </button>
+                        </div>
+                    </div>
+
                     {/* SOC ON-DUTY ROSTER & SURVEILLANCE STATUS BANNER (TOP OF DASHBOARD) */}
                     <div className="bg-white border border-[#D3DAE6] rounded-xl shadow-xs overflow-hidden">
                         {/* Header Strip */}
@@ -431,6 +495,405 @@ export default function Dashboard({
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* TOP STATS ROW (AGENTS SUMMARY + LAST 24 HOURS ALERTS) */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+                        {/* 1. AGENTS SUMMARY CARD (Donut Chart) */}
+                        <div className="lg:col-span-4 bg-white border border-[#D3DAE6] rounded-xl px-5 py-4 pt-6 relative shadow-xs flex items-center">
+                            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white border border-[#D3DAE6] rounded-full px-4 py-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-700 whitespace-nowrap shadow-2xs flex items-center gap-1.5">
+                                <svg className="w-3.5 h-3.5 text-[#006BB4]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                </svg>
+                                AGENTS SUMMARY
+                            </div>
+
+                            <div className="flex items-center justify-around w-full gap-3">
+                                {/* Donut Chart SVG */}
+                                <div className="relative w-32 h-32 flex-shrink-0">
+                                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                                        <circle cx="50" cy="50" r="38" fill="none" stroke="#F0F4F8" strokeWidth="14" />
+                                        {/* Active */}
+                                        <circle
+                                            cx="50"
+                                            cy="50"
+                                            r="38"
+                                            fill="none"
+                                            stroke="#0F8174"
+                                            strokeWidth="14"
+                                            strokeDasharray={`${(agentsSummary.active / (agentsSummary.total || 1)) * 238.76} 238.76`}
+                                            strokeDashoffset="0"
+                                            className="transition-all duration-700 ease-out cursor-pointer hover:opacity-90"
+                                            onClick={() =>
+                                                openModule(
+                                                    'Active Agents Summary',
+                                                    `ขณะนี้มีเครื่องลูกข่ายและแม่ข่ายเปิดทำงานปกติ ${agentsSummary.active} โหนด จากทั้งหมด ${agentsSummary.total} โหนดใน 13 โรงพยาบาล`
+                                                )
+                                            }
+                                        />
+                                        {/* Disconnected */}
+                                        <circle
+                                            cx="50"
+                                            cy="50"
+                                            r="38"
+                                            fill="none"
+                                            stroke="#BD271E"
+                                            strokeWidth="14"
+                                            strokeDasharray={`${(agentsSummary.disconnected / (agentsSummary.total || 1)) * 238.76} 238.76`}
+                                            strokeDashoffset={`-${(agentsSummary.active / (agentsSummary.total || 1)) * 238.76}`}
+                                            className="transition-all duration-700 ease-out cursor-pointer hover:opacity-90"
+                                            onClick={() =>
+                                                openModule(
+                                                    'Disconnected Agents Summary',
+                                                    `ขณะนี้มีเครื่องลูกข่ายหรือเซิร์ฟเวอร์ขาดการติดต่อ ${agentsSummary.disconnected} โหนด ต้องการการตรวจสอบการเชื่อมต่อ`
+                                                )
+                                            }
+                                        />
+                                    </svg>
+
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                        <span className="text-2xl font-bold text-slate-800">{agentsSummary.total}</span>
+                                        <span className="text-[10px] uppercase font-bold text-slate-400">Total Nodes</span>
+                                    </div>
+                                </div>
+
+                                {/* Legend */}
+                                <div className="flex flex-col justify-center gap-1.5">
+                                    <div
+                                        className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-2 py-1 rounded-lg transition"
+                                        onClick={() => openModule('Active Agents Filter', 'แสดงรายการโหนดที่ทำงานปกติในเครือข่าย สสจ.พิจิตร')}
+                                    >
+                                        <span className="w-3 h-3 rounded-full bg-[#0F8174]"></span>
+                                        <span className="text-xs font-semibold text-slate-700">Active (ออนไลน์):</span>
+                                        <span className="text-xs font-bold text-[#0F8174]">{agentsSummary.active}</span>
+                                    </div>
+
+                                    <div
+                                        className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-2 py-1 rounded-lg transition"
+                                        onClick={() => openModule('Disconnected Agents Filter', 'แสดงรายการโหนดที่ขาดการติดต่อในเครือข่าย สสจ.พิจิตร')}
+                                    >
+                                        <span className="w-3 h-3 rounded-full bg-[#BD271E]"></span>
+                                        <span className="text-xs font-semibold text-slate-700">Disconnected:</span>
+                                        <span className="text-xs font-bold text-[#BD271E]">{agentsSummary.disconnected}</span>
+                                    </div>
+
+                                    <div className="pt-1.5 px-2 border-t border-slate-100 text-[11px] text-slate-500">
+                                        <span>ความพร้อมระบบ: </span>
+                                        <strong className="text-emerald-700 font-bold">{agentsSummary.coverage_percent}%</strong>
+                                    </div>
+
+                                    <div className="px-2 text-[10px] text-slate-400">
+                                        ครอบคลุม 13 รพ. ในสังกัด สสจ.พิจิตร
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. LAST 24 HOURS ALERTS (THREAT SEVERITY CARDS) */}
+                        <div className="lg:col-span-8 bg-white border border-[#D3DAE6] rounded-xl px-5 py-4 pt-6 relative shadow-xs flex items-center">
+                            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white border border-[#D3DAE6] rounded-full px-4 py-0.5 text-[11px] font-bold uppercase tracking-wider text-slate-700 whitespace-nowrap shadow-2xs flex items-center gap-1.5">
+                                <svg className="w-3.5 h-3.5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                LAST 24 HOURS SECURITY ALERTS (THREAT SEVERITY)
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full items-center text-center">
+                                {/* Critical Severity */}
+                                <div
+                                    onClick={() => openModule('Critical Severity Alerts', 'การแจ้งเตือนระดับวิกฤต (Rule level 15+) ตรวจจับภัยคุกคามรุนแรงสูงสุด')}
+                                    className="flex flex-col items-center justify-center p-3 rounded-xl border border-rose-100 hover:border-rose-300 hover:bg-rose-50/50 transition cursor-pointer group"
+                                >
+                                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                                        <span>🚨</span>
+                                        <span>Critical severity</span>
+                                    </div>
+                                    <div className="text-2xl sm:text-3xl font-extrabold text-[#BD271E] my-1 group-hover:scale-105 transition">
+                                        {alertsSummary.critical}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 font-medium">Rule level 15+</div>
+                                    <span className="mt-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                        {String(alertsSummary.critical) === '0' ? 'ปลอดภัย 0 เหตุการณ์' : `${alertsSummary.critical} เหตุการณ์วิกฤต`}
+                                    </span>
+                                </div>
+
+                                {/* High Severity */}
+                                <div
+                                    onClick={() => openModule('High Severity Alerts', `การแจ้งเตือนระดับสูง (Rule level 12-14) จำนวน ${alertsSummary.high} เหตุการณ์ ได้รับการตรวจสอบและจำกัดวงแล้ว`)}
+                                    className="flex flex-col items-center justify-center p-3 rounded-xl border border-amber-100 hover:border-amber-300 hover:bg-amber-50/50 transition cursor-pointer group"
+                                >
+                                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                                        <span>⚠️</span>
+                                        <span>High severity</span>
+                                    </div>
+                                    <div className="text-2xl sm:text-3xl font-extrabold text-[#FEC514] my-1 group-hover:scale-105 transition">
+                                        {alertsSummary.high}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 font-medium">Rule level 12 to 14</div>
+                                    <span className="mt-1.5 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                        มอนิเตอร์และบล็อกแล้ว
+                                    </span>
+                                </div>
+
+                                {/* Medium Severity */}
+                                <div
+                                    onClick={() => openModule('Medium Severity Alerts', `การแจ้งเตือนระดับปานกลาง (Rule level 7-11) จำนวน ${alertsSummary.medium} เหตุการณ์ มีการวิเคราะห์และเก็บ Log อัตโนมัติ`)}
+                                    className="flex flex-col items-center justify-center p-3 rounded-xl border border-sky-100 hover:border-sky-300 hover:bg-sky-50/50 transition cursor-pointer group"
+                                >
+                                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                                        <span>🔵</span>
+                                        <span>Medium severity</span>
+                                    </div>
+                                    <div className="text-2xl sm:text-3xl font-extrabold text-[#6092C0] my-1 tracking-tight group-hover:scale-105 transition">
+                                        {alertsSummary.medium}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 font-medium">Rule level 7 to 11</div>
+                                    <span className="mt-1.5 text-[10px] font-semibold text-sky-800 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-full">
+                                        วิเคราะห์อัตโนมัติ
+                                    </span>
+                                </div>
+
+                                {/* Low Severity */}
+                                <div
+                                    onClick={() => openModule('Low Severity Alerts', `การแจ้งเตือนระดับทั่วไป (Rule level 0-6) จำนวน ${alertsSummary.low} เหตุการณ์ บันทึกกิจกรรมระบบทั่วไป`)}
+                                    className="flex flex-col items-center justify-center p-3 rounded-xl border border-teal-100 hover:border-teal-300 hover:bg-teal-50/50 transition cursor-pointer group"
+                                >
+                                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                                        <span>🟢</span>
+                                        <span>Low severity</span>
+                                    </div>
+                                    <div className="text-2xl sm:text-3xl font-extrabold text-[#007871] my-1 tracking-tight group-hover:scale-105 transition">
+                                        {alertsSummary.low}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 font-medium">Rule level 0 to 6</div>
+                                    <span className="mt-1.5 text-[10px] font-semibold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+                                        บันทึกระบบทั่วไป
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* RECENT WAZUH SECURITY EVENTS FEED CARD (SEPARATE COMPACT CARD) */}
+                    {Array.isArray(alertsSummary.recent_events) && alertsSummary.recent_events.length > 0 && (
+                        <div className="bg-white border border-[#D3DAE6] rounded-xl p-4 shadow-xs space-y-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                                    <span>📡 รายการเหตุการณ์แจ้งเตือนล่าสุดจาก Wazuh SIEM (`wazuh-alerts-*`)</span>
+                                </span>
+                                <span className="text-[11px] text-slate-500 font-mono bg-slate-50 border border-slate-200 px-2 py-0.5 rounded">
+                                    Source: {alertsSummary.source === 'live' ? 'Live OpenSearch (ctmr.ppho.go.th)' : 'Baseline Feed'}
+                                </span>
+                            </div>
+                            <div className="border border-slate-200 rounded-lg overflow-x-auto">
+                                <table className="w-full text-[11px] text-left">
+                                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-3 py-1.5">เวลา</th>
+                                            <th className="px-3 py-1.5">โหนด (Agent)</th>
+                                            <th className="px-3 py-1.5">Level</th>
+                                            <th className="px-3 py-1.5">รายละเอียดเหตุการณ์ (Rule Description)</th>
+                                            <th className="px-3 py-1.5">MITRE</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {alertsSummary.recent_events.slice(0, 4).map((evt) => (
+                                            <tr key={evt.id} className="hover:bg-slate-50/80">
+                                                <td className="px-3 py-1.5 font-mono text-slate-500 whitespace-nowrap">
+                                                    {evt.timestamp}
+                                                </td>
+                                                <td className="px-3 py-1.5 font-mono font-semibold text-slate-800 whitespace-nowrap">
+                                                    {evt.agent_name}
+                                                    <span className="text-[10px] text-slate-400 font-normal ml-1">
+                                                        ({evt.agent_ip})
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-1.5 whitespace-nowrap">
+                                                    <span
+                                                        className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
+                                                            evt.rule_level >= 15
+                                                                ? 'bg-rose-100 text-rose-800'
+                                                                : evt.rule_level >= 12
+                                                                ? 'bg-amber-100 text-amber-800'
+                                                                : 'bg-sky-100 text-sky-800'
+                                                        }`}
+                                                    >
+                                                        Lv.{evt.rule_level} (#{evt.rule_id})
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-1.5 text-slate-700 truncate max-w-md" title={evt.description}>
+                                                    {evt.description}
+                                                </td>
+                                                <td className="px-3 py-1.5 whitespace-nowrap">
+                                                    {evt.mitre_id ? (
+                                                        <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono text-[10px] font-semibold">
+                                                            {evt.mitre_id}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-400">-</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* SECTION 2: 13 HOSPITALS AGENT MONITORING MATRIX */}
+                    <div className="bg-white border border-[#D3DAE6] rounded-xl p-6 relative shadow-xs">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200 pb-4 mb-5">
+                            <div>
+                                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                    <span className="text-lg">🏥</span>
+                                    สถานะจำนวน Agent แยกตาม 13 โรงพยาบาลของจังหวัดพิจิตร
+                                </h2>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    แสดงผลการเชื่อมต่อโหนดลูกข่ายและเซิร์ฟเวอร์แม่ข่ายของสถานพยาบาลในสังกัด สสจ.พิจิตร ทั้ง 13 แห่ง
+                                </p>
+                            </div>
+
+                            {/* Search & Filter Buttons */}
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                {/* Search box */}
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={hospitalSearch}
+                                        onChange={(e) => setHospitalSearch(e.target.value)}
+                                        placeholder="ค้นหาชื่อ รพ. หรือรหัส..."
+                                        className="text-xs pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#006BB4] w-48"
+                                    />
+                                    <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <circle cx="11" cy="11" r="8"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                </div>
+
+                                {/* Filter Buttons */}
+                                <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
+                                    <button
+                                        onClick={() => setHospitalFilter('all')}
+                                        className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
+                                            hospitalFilter === 'all'
+                                                ? 'bg-white text-[#006BB4] shadow-xs'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        ทั้งหมด (13 รพ.)
+                                    </button>
+                                    <button
+                                        onClick={() => setHospitalFilter('warning')}
+                                        className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
+                                            hospitalFilter === 'warning'
+                                                ? 'bg-white text-rose-600 shadow-xs'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        ต้องตรวจสอบ ({hospitalsAgents.filter((h) => h.health_score < 80).length})
+                                    </button>
+                                    <button
+                                        onClick={() => setHospitalFilter('healthy')}
+                                        className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
+                                            hospitalFilter === 'healthy'
+                                                ? 'bg-white text-emerald-700 shadow-xs'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        สมบูรณ์ ({hospitalsAgents.filter((h) => h.health_score >= 80).length})
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 13 Hospitals Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {filteredHospitals.map((hosp) => {
+                                const isWarning = hosp.health_score < 80;
+                                const isCritical = hosp.health_score < 65;
+
+                                return (
+                                    <div
+                                        key={hosp.code}
+                                        onClick={() => setSelectedHospitalDetail(hosp)}
+                                        className={`rounded-xl border p-4 transition duration-150 hover:shadow-md cursor-pointer flex flex-col justify-between ${
+                                            isCritical
+                                                ? 'bg-rose-50/25 border-rose-200 hover:border-rose-400'
+                                                : isWarning
+                                                ? 'bg-amber-50/20 border-amber-200 hover:border-amber-400'
+                                                : 'bg-white border-slate-200 hover:border-[#006BB4]/50'
+                                        }`}
+                                    >
+                                        <div>
+                                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                                                <span className="font-mono text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+                                                    NODE {hosp.code}
+                                                </span>
+                                                <span
+                                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                                                        hosp.health_score >= 80
+                                                            ? 'bg-emerald-100 text-emerald-800'
+                                                            : hosp.health_score >= 65
+                                                            ? 'bg-amber-100 text-amber-800'
+                                                            : 'bg-rose-100 text-rose-800'
+                                                    }`}
+                                                >
+                                                    <span
+                                                        className={`w-1.5 h-1.5 rounded-full ${
+                                                            hosp.health_score >= 80
+                                                                ? 'bg-emerald-500'
+                                                                : hosp.health_score >= 65
+                                                                ? 'bg-amber-500'
+                                                                : 'bg-rose-500 animate-ping'
+                                                        }`}
+                                                    ></span>
+                                                    {hosp.health_score}%
+                                                </span>
+                                            </div>
+
+                                            <h3 className="text-xs font-bold text-slate-800 line-clamp-1" title={hosp.name}>
+                                                {hosp.name}
+                                            </h3>
+                                            <p className="text-[10px] text-slate-500 mb-3">{hosp.type}</p>
+
+                                            {/* Health bar */}
+                                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-3">
+                                                <div
+                                                    className={`h-full transition-all duration-500 rounded-full ${
+                                                        hosp.health_score >= 80
+                                                            ? 'bg-emerald-500'
+                                                            : hosp.health_score >= 65
+                                                            ? 'bg-amber-500'
+                                                            : 'bg-rose-500'
+                                                    }`}
+                                                    style={{ width: `${hosp.health_score}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+
+                                        {/* Metrics footer */}
+                                        <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-slate-500 font-medium">โหนดรวม:</span>
+                                                <strong className="text-slate-800">{hosp.total}</strong>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-[11px]">
+                                                <span className="text-emerald-700 font-bold flex items-center gap-1">
+                                                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                                    {hosp.active}
+                                                </span>
+                                                <span className="text-slate-300">/</span>
+                                                <span className="text-rose-600 font-bold flex items-center gap-1">
+                                                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                                                    {hosp.disconnected}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
 

@@ -190,7 +190,23 @@ export default function CtmrLayout({ children, title = 'Overview', activeNav = '
 
                                     <div className="py-1">
                                         <Link
-                                            href="/profile/notifications"
+                                            href="/profile"
+                                            onClick={() => setUserMenuOpen(false)}
+                                            className="w-full text-left px-4 py-2 flex items-center justify-between hover:bg-slate-50 text-slate-700 font-medium transition cursor-pointer"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <svg className="w-4 h-4 text-[#006BB4]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                                <span>โปรไฟล์ส่วนตัว & ข้อมูลสังกัด</span>
+                                            </div>
+                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-[#006BB4]">
+                                                Profile
+                                            </span>
+                                        </Link>
+
+                                        <Link
+                                            href="/profile?tab=connections"
                                             onClick={() => setUserMenuOpen(false)}
                                             className="w-full text-left px-4 py-2 flex items-center justify-between hover:bg-slate-50 text-slate-700 font-medium transition cursor-pointer"
                                         >
@@ -443,19 +459,19 @@ export default function CtmrLayout({ children, title = 'Overview', activeNav = '
                     </Link>
 
                     <Link
-                        href="/profile/notifications"
+                        href="/profile"
                         onClick={() => setDrawerOpen(false)}
                         className={`px-4 py-2.5 flex items-center justify-between border-b border-slate-100 transition ${
-                            activeNav === 'profile-notifications' ? 'bg-[#F0F6FC] text-[#006BB4] font-semibold' : 'text-slate-700 hover:bg-slate-50'
+                            activeNav === 'profile-notifications' || activeNav === 'profile' ? 'bg-[#F0F6FC] text-[#006BB4] font-semibold' : 'text-slate-700 hover:bg-slate-50'
                         }`}
                     >
                         <div className="flex items-center gap-2.5">
-                            <svg className="w-4 h-4 text-[#0088cc]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                            <svg className="w-4 h-4 text-[#006BB4]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                             </svg>
-                            <span>แจ้งเตือน Telegram & LINE OA</span>
+                            <span>โปรไฟล์ส่วนตัว & การเชื่อมต่อ</span>
                         </div>
-                        <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded-full">Bot</span>
+                        <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded-full">Profile</span>
                     </Link>
 
                     {/* Admin-only Section */}
