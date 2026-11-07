@@ -5,6 +5,7 @@ import CtmrLayout from '@/Layouts/CtmrLayout';
 export default function Dashboard({
     agentsSummary = { total: 613, active: 418, disconnected: 195, coverage_percent: 68.2 },
     hospitalsAgents = [],
+    otherAgenciesAgents = [],
     alertsSummary = {
         critical: 0,
         high: 291,
@@ -59,6 +60,8 @@ export default function Dashboard({
     const currentUser = auth?.user;
     const [hospitalFilter, setHospitalFilter] = useState('all');
     const [hospitalSearch, setHospitalSearch] = useState('');
+    const [otherAgencyFilter, setOtherAgencyFilter] = useState('all');
+    const [otherAgencySearch, setOtherAgencySearch] = useState('');
     const [selectedHospitalDetail, setSelectedHospitalDetail] = useState(null);
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncTime, setSyncTime] = useState(lastUpdated);
@@ -87,6 +90,7 @@ export default function Dashboard({
         const matchesSearch =
             h.name.toLowerCase().includes(hospitalSearch.toLowerCase()) ||
             h.code.includes(hospitalSearch) ||
+            (h.hospcode && h.hospcode.includes(hospitalSearch)) ||
             (h.type && h.type.toLowerCase().includes(hospitalSearch.toLowerCase()));
 
         if (!matchesSearch) return false;
@@ -99,6 +103,36 @@ export default function Dashboard({
         }
         return true;
     });
+
+    // Filter external / non-Phichit 5-digit agencies
+    const filteredOtherAgencies = otherAgenciesAgents.filter((ag) => {
+        const q = otherAgencySearch.toLowerCase();
+        const matchesSearch =
+            ag.name.toLowerCase().includes(q) ||
+            String(ag.code).toLowerCase().includes(q) ||
+            (ag.province && ag.province.toLowerCase().includes(q)) ||
+            (ag.type && ag.type.toLowerCase().includes(q));
+
+        if (!matchesSearch) return false;
+
+        if (otherAgencyFilter === 'warning') {
+            return ag.health_score < 80;
+        }
+        if (otherAgencyFilter === 'healthy') {
+            return ag.health_score >= 80;
+        }
+        return true;
+    });
+
+    const otherAgenciesTotals = otherAgenciesAgents.reduce(
+        (acc, item) => {
+            acc.total += Number(item.total || 0);
+            acc.active += Number(item.active || 0);
+            acc.disconnected += Number(item.disconnected || 0);
+            return acc;
+        },
+        { total: 0, active: 0, disconnected: 0 }
+    );
 
     // Helper for shift Thai labels
     const getShiftLabel = (shift) => {
@@ -527,8 +561,19 @@ export default function Dashboard({
                                             className="transition-all duration-700 ease-out cursor-pointer hover:opacity-90"
                                             onClick={() =>
                                                 openModule(
-                                                    'Active Agents Summary',
-                                                    `ขณะนี้มีเครื่องลูกข่ายและแม่ข่ายเปิดทำงานปกติ ${agentsSummary.active} โหนด จากทั้งหมด ${agentsSummary.total} โหนดใน 13 โรงพยาบาล`
+                                                    'Active Agents Summary (โหนดออนไลน์)',
+                                                    `ขณะนี้มีเครื่องลูกข่ายและแม่ข่ายเปิดทำงานและส่งข้อมูลเข้าสู่ศูนย์ SOC ปกติจำนวน ${agentsSummary.active} โหนด จากทั้งหมด ${agentsSummary.total} โหนดในเครือข่าย 13 โรงพยาบาล`,
+                                                    {
+                                                        badge: `${agentsSummary.active} / ${agentsSummary.total} Nodes`,
+                                                        badgeColor: 'bg-[#0F8174]',
+                                                        details: [
+                                                            { label: 'สถานะการเชื่อมต่อ Agent', value: 'Active (ออนไลน์และส่ง Log แบบ Real-time)', highlight: 'emerald' },
+                                                            { label: 'จำนวนโหนดที่ออนไลน์', value: `${agentsSummary.active} โหนด (จากทั้งหมด ${agentsSummary.total} โหนด)`, highlight: 'emerald' },
+                                                            { label: 'อัตราความพร้อมของระบบรวม', value: `${agentsSummary.coverage_percent}% ของเครือข่ายทั้งหมด` },
+                                                            { label: 'ขอบเขตการดูแล', value: 'ครอบคลุม 13 โรงพยาบาลและ สสจ.พิจิตร' },
+                                                            { label: 'แหล่งข้อมูลอ้างอิง', value: 'Wazuh Manager API (/agents/summary/status)', mono: true },
+                                                        ],
+                                                    }
                                                 )
                                             }
                                         />
@@ -545,8 +590,19 @@ export default function Dashboard({
                                             className="transition-all duration-700 ease-out cursor-pointer hover:opacity-90"
                                             onClick={() =>
                                                 openModule(
-                                                    'Disconnected Agents Summary',
-                                                    `ขณะนี้มีเครื่องลูกข่ายหรือเซิร์ฟเวอร์ขาดการติดต่อ ${agentsSummary.disconnected} โหนด ต้องการการตรวจสอบการเชื่อมต่อ`
+                                                    'Disconnected Agents Summary (โหนดขาดการติดต่อ)',
+                                                    `ขณะนี้มีเครื่องลูกข่ายหรือเซิร์ฟเวอร์ขาดการติดต่อจำนวน ${agentsSummary.disconnected} โหนด (อาจเกิดจากเครื่องปิดพักการใช้งานนอกเวลาทำการ หรือสายสัญญาณขัดข้อง)`,
+                                                    {
+                                                        badge: `${agentsSummary.disconnected} Disconnected`,
+                                                        badgeColor: 'bg-[#BD271E]',
+                                                        details: [
+                                                            { label: 'สถานะการเชื่อมต่อ Agent', value: 'Disconnected (หยุดส่งสัญญาณ Keepalive)', highlight: 'rose' },
+                                                            { label: 'จำนวนโหนดที่ขาดการติดต่อ', value: `${agentsSummary.disconnected} โหนด (จากทั้งหมด ${agentsSummary.total} โหนด)`, highlight: 'rose' },
+                                                            { label: 'โหนดที่ยังไม่เคยลงทะเบียน (Never Connected)', value: `${agentsSummary.never_connected || 0} โหนด` },
+                                                            { label: 'คำแนะนำในการดำเนินการ', value: 'ตรวจสอบสถานะบริการ wazuh-agent หรือการเชื่อมต่อ VPN ของโรงพยาบาล' },
+                                                            { label: 'แหล่งข้อมูลอ้างอิง', value: 'Wazuh Manager API (/agents/summary/status)', mono: true },
+                                                        ],
+                                                    }
                                                 )
                                             }
                                         />
@@ -562,7 +618,22 @@ export default function Dashboard({
                                 <div className="flex flex-col justify-center gap-1.5">
                                     <div
                                         className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-2 py-1 rounded-lg transition"
-                                        onClick={() => openModule('Active Agents Filter', 'แสดงรายการโหนดที่ทำงานปกติในเครือข่าย สสจ.พิจิตร')}
+                                        onClick={() =>
+                                            openModule(
+                                                'Active Agents Summary (โหนดออนไลน์)',
+                                                `สรุปจำนวนโหนดที่เปิดใช้งานและเชื่อมต่อกับ Wazuh Manager ในขณะนี้ จำนวน ${agentsSummary.active} โหนด`,
+                                                {
+                                                    badge: `${agentsSummary.active} Active`,
+                                                    badgeColor: 'bg-[#0F8174]',
+                                                    details: [
+                                                        { label: 'สถานะการทำงาน', value: 'ออนไลน์และเฝ้าระวังแบบ Real-time', highlight: 'emerald' },
+                                                        { label: 'จำนวนโหนดออนไลน์', value: `${agentsSummary.active} โหนด (คิดเป็น ${agentsSummary.coverage_percent}%)`, highlight: 'emerald' },
+                                                        { label: 'ขอบเขตเครือข่าย', value: '13 โรงพยาบาลในสังกัด สสจ.พิจิตร' },
+                                                        { label: 'โปรโตคอลการสื่อสาร', value: 'TCP/1514 (Wazuh Agent Encrypted Channel)', mono: true },
+                                                    ],
+                                                }
+                                            )
+                                        }
                                     >
                                         <span className="w-3 h-3 rounded-full bg-[#0F8174]"></span>
                                         <span className="text-xs font-semibold text-slate-700">Active (ออนไลน์):</span>
@@ -571,7 +642,22 @@ export default function Dashboard({
 
                                     <div
                                         className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 px-2 py-1 rounded-lg transition"
-                                        onClick={() => openModule('Disconnected Agents Filter', 'แสดงรายการโหนดที่ขาดการติดต่อในเครือข่าย สสจ.พิจิตร')}
+                                        onClick={() =>
+                                            openModule(
+                                                'Disconnected Agents Summary (โหนดขาดการติดต่อ)',
+                                                `สรุปจำนวนโหนดที่ไม่ส่งสัญญาณตอบกลับมายัง Wazuh Manager จำนวน ${agentsSummary.disconnected} โหนด`,
+                                                {
+                                                    badge: `${agentsSummary.disconnected} Disconnected`,
+                                                    badgeColor: 'bg-[#BD271E]',
+                                                    details: [
+                                                        { label: 'สถานะการเชื่อมต่อ', value: 'ขาดการติดต่อเกินระยะเวลา Keepalive', highlight: 'rose' },
+                                                        { label: 'จำนวนโหนดที่ออฟไลน์', value: `${agentsSummary.disconnected} โหนด จาก ${agentsSummary.total} โหนด`, highlight: 'rose' },
+                                                        { label: 'สาเหตุที่พบบ่อย', value: 'เครื่องลูกข่ายปิดหลังเลิกงาน หรือ Firewall บล็อกพอร์ต 1514' },
+                                                        { label: 'การตรวจสอบรายโรงพยาบาล', value: 'ดูรายละเอียดแยกตามรหัส 5 หลักได้จากตาราง 13 โรงพยาบาลด้านล่าง' },
+                                                    ],
+                                                }
+                                            )
+                                        }
                                     >
                                         <span className="w-3 h-3 rounded-full bg-[#BD271E]"></span>
                                         <span className="text-xs font-semibold text-slate-700">Disconnected:</span>
@@ -602,7 +688,31 @@ export default function Dashboard({
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full items-center text-center">
                                 {/* Critical Severity */}
                                 <div
-                                    onClick={() => openModule('Critical Severity Alerts', 'การแจ้งเตือนระดับวิกฤต (Rule level 15+) ตรวจจับภัยคุกคามรุนแรงสูงสุด')}
+                                    onClick={() =>
+                                        openModule(
+                                            'Critical Severity Alerts',
+                                            `การแจ้งเตือนภัยคุกคามระดับวิกฤต (Rule level 15 ขึ้นไป) ในรอบ 24 ชั่วโมงที่ผ่านมา พบจำนวน ${alertsSummary.critical} เหตุการณ์`,
+                                            {
+                                                badge: 'Rule Level 15+',
+                                                badgeColor: 'bg-[#BD271E]',
+                                                details: [
+                                                    {
+                                                        label: 'จำนวนเหตุการณ์ (24 ชม. ล่าสุด)',
+                                                        value: `${alertsSummary.critical} เหตุการณ์`,
+                                                        highlight: String(alertsSummary.critical) === '0' ? 'emerald' : 'rose',
+                                                    },
+                                                    { label: 'ระดับความรุนแรง (Severity Level)', value: 'Critical (Wazuh Rule Level 15 - 16)', mono: true },
+                                                    { label: 'ประเภทภัยคุกคามที่ตรวจจับ', value: 'Ransomware, Rootkit, Privilege Escalation, การยึดครองระบบ' },
+                                                    {
+                                                        label: 'สถานะการตอบสนอง (SOC Action)',
+                                                        value: String(alertsSummary.critical) === '0' ? 'ปลอดภัย ไม่พบการโจมตีระดับวิกฤต' : 'แจ้งเตือนด่วนผ่าน Telegram/LINE และตัดการเชื่อมต่อทันที',
+                                                        highlight: String(alertsSummary.critical) === '0' ? 'emerald' : 'rose',
+                                                    },
+                                                    { label: 'ดัชนีข้อมูล (Index Source)', value: 'wazuh-alerts-4.x-* (OpenSearch 24h Aggregation)', mono: true },
+                                                ],
+                                            }
+                                        )
+                                    }
                                     className="flex flex-col items-center justify-center p-3 rounded-xl border border-rose-100 hover:border-rose-300 hover:bg-rose-50/50 transition cursor-pointer group"
                                 >
                                     <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
@@ -620,7 +730,23 @@ export default function Dashboard({
 
                                 {/* High Severity */}
                                 <div
-                                    onClick={() => openModule('High Severity Alerts', `การแจ้งเตือนระดับสูง (Rule level 12-14) จำนวน ${alertsSummary.high} เหตุการณ์ ได้รับการตรวจสอบและจำกัดวงแล้ว`)}
+                                    onClick={() =>
+                                        openModule(
+                                            'High Severity Alerts',
+                                            `การแจ้งเตือนระดับสูง (Rule level 12 - 14) ในรอบ 24 ชั่วโมงที่ผ่านมา พบจำนวน ${alertsSummary.high} เหตุการณ์ ซึ่งระบบได้ตรวจจับและเฝ้าระวังแล้ว`,
+                                            {
+                                                badge: 'Rule Level 12 - 14',
+                                                badgeColor: 'bg-amber-500',
+                                                details: [
+                                                    { label: 'จำนวนเหตุการณ์ (24 ชม. ล่าสุด)', value: `${alertsSummary.high} เหตุการณ์`, highlight: 'amber' },
+                                                    { label: 'ระดับความรุนแรง (Severity Level)', value: 'High (Wazuh Rule Level 12 to 14)', mono: true },
+                                                    { label: 'ประเภทเหตุการณ์สำคัญ', value: 'Brute-force Attack, SQL Injection, การแก้ไขไฟล์ระบบสำคัญ (FIM)' },
+                                                    { label: 'สถานะการตอบสนอง (SOC Action)', value: 'มอนิเตอร์โดยเจ้าหน้าที่เวร SOC และบล็อก IP ต้นทางที่ผิดปกติ', highlight: 'amber' },
+                                                    { label: 'ดัชนีข้อมูล (Index Source)', value: 'wazuh-alerts-4.x-* (OpenSearch 24h Aggregation)', mono: true },
+                                                ],
+                                            }
+                                        )
+                                    }
                                     className="flex flex-col items-center justify-center p-3 rounded-xl border border-amber-100 hover:border-amber-300 hover:bg-amber-50/50 transition cursor-pointer group"
                                 >
                                     <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
@@ -638,7 +764,23 @@ export default function Dashboard({
 
                                 {/* Medium Severity */}
                                 <div
-                                    onClick={() => openModule('Medium Severity Alerts', `การแจ้งเตือนระดับปานกลาง (Rule level 7-11) จำนวน ${alertsSummary.medium} เหตุการณ์ มีการวิเคราะห์และเก็บ Log อัตโนมัติ`)}
+                                    onClick={() =>
+                                        openModule(
+                                            'Medium Severity Alerts',
+                                            `การแจ้งเตือนระดับปานกลาง (Rule level 7 - 11) ในรอบ 24 ชั่วโมงที่ผ่านมา จำนวน ${alertsSummary.medium} เหตุการณ์ มีการวิเคราะห์และจัดเก็บ Log อัตโนมัติ`,
+                                            {
+                                                badge: 'Rule Level 7 - 11',
+                                                badgeColor: 'bg-[#6092C0]',
+                                                details: [
+                                                    { label: 'จำนวนเหตุการณ์ (24 ชม. ล่าสุด)', value: `${alertsSummary.medium} เหตุการณ์`, highlight: 'sky' },
+                                                    { label: 'ระดับความรุนแรง (Severity Level)', value: 'Medium (Wazuh Rule Level 7 to 11)', mono: true },
+                                                    { label: 'ประเภทเหตุการณ์ที่พบบ่อย', value: 'การล็อกอินผิดพลาดหลายครั้ง, Multiple Windows Error Events, การเปลี่ยนสิทธิ์ผู้ใช้' },
+                                                    { label: 'สถานะการประมวลผล', value: 'วิเคราะห์ความสัมพันธ์ของเหตุการณ์ (Correlation) อัตโนมัติ', highlight: 'sky' },
+                                                    { label: 'ดัชนีข้อมูล (Index Source)', value: 'wazuh-alerts-4.x-* (OpenSearch 24h Aggregation)', mono: true },
+                                                ],
+                                            }
+                                        )
+                                    }
                                     className="flex flex-col items-center justify-center p-3 rounded-xl border border-sky-100 hover:border-sky-300 hover:bg-sky-50/50 transition cursor-pointer group"
                                 >
                                     <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
@@ -656,7 +798,23 @@ export default function Dashboard({
 
                                 {/* Low Severity */}
                                 <div
-                                    onClick={() => openModule('Low Severity Alerts', `การแจ้งเตือนระดับทั่วไป (Rule level 0-6) จำนวน ${alertsSummary.low} เหตุการณ์ บันทึกกิจกรรมระบบทั่วไป`)}
+                                    onClick={() =>
+                                        openModule(
+                                            'Low Severity Alerts',
+                                            `การแจ้งเตือนระดับทั่วไป (Rule level 0 - 6) จำนวน ${alertsSummary.low} เหตุการณ์ เป็นบันทึกกิจกรรมระบบและการทำงานปกติของเซิร์ฟเวอร์และเครื่องลูกข่าย`,
+                                            {
+                                                badge: 'Rule Level 0 - 6',
+                                                badgeColor: 'bg-[#007871]',
+                                                details: [
+                                                    { label: 'จำนวนเหตุการณ์ (24 ชม. ล่าสุด)', value: `${alertsSummary.low} เหตุการณ์`, highlight: 'emerald' },
+                                                    { label: 'ระดับความรุนแรง (Severity Level)', value: 'Low / Informational (Wazuh Rule Level 0 to 6)', mono: true },
+                                                    { label: 'ประเภทกิจกรรมที่บันทึก', value: 'การเข้าสู่ระบบสำเร็จ, การเปิด-ปิดบริการระบบ, Audit Log ตาม พ.ร.บ.คอมพิวเตอร์ฯ' },
+                                                    { label: 'สถานะการจัดเก็บข้อมูล', value: 'จัดเก็บเข้าคลัง Log กลางเพื่อการตรวจสอบย้อนหลัง (Compliance & Auditing)', highlight: 'emerald' },
+                                                    { label: 'ดัชนีข้อมูล (Index Source)', value: 'wazuh-alerts-4.x-* (OpenSearch 24h Aggregation)', mono: true },
+                                                ],
+                                            }
+                                        )
+                                    }
                                     className="flex flex-col items-center justify-center p-3 rounded-xl border border-teal-100 hover:border-teal-300 hover:bg-teal-50/50 transition cursor-pointer group"
                                 >
                                     <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
@@ -895,6 +1053,180 @@ export default function Dashboard({
                                 );
                             })}
                         </div>
+                    </div>
+
+                    {/* SECTION 2B: OTHER AGENCIES (NON-PHICHIT 13 HOSPITALS) AGENT MONITORING MATRIX BY 5-DIGIT HOSPCODE */}
+                    <div className="bg-white border border-[#D3DAE6] rounded-xl p-6 relative shadow-xs">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200 pb-4 mb-5">
+                            <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                        <span className="text-lg">🌐</span>
+                                        สถานะจำนวน Agent ของหน่วยงานอื่นๆ นอกเหนือจาก 13 รพ. สสจ.พิจิตร (จำแนกตามรหัส 5 หลัก)
+                                    </h2>
+                                    <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+                                        {otherAgenciesAgents.length} หน่วยงาน • รวม {otherAgenciesTotals.total} โหนด (Active {otherAgenciesTotals.active} / Disconnected {otherAgenciesTotals.disconnected})
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    แสดงผลการเชื่อมต่อโหนดของโรงพยาบาลและหน่วยบริการสุขภาพอื่นๆ ในเขตสุขภาพที่ 3 และเครือข่ายที่เชื่อมโยงกับเซิร์ฟเวอร์ CTMR แยกตามรหัสสถานพยาบาล 5 หลัก
+                                </p>
+                            </div>
+
+                            {/* Search & Filter Buttons */}
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                {/* Search box */}
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={otherAgencySearch}
+                                        onChange={(e) => setOtherAgencySearch(e.target.value)}
+                                        placeholder="ค้นหารหัส 5 หลัก, ชื่อ หรือจังหวัด..."
+                                        className="text-xs pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#006BB4] w-56"
+                                    />
+                                    <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <circle cx="11" cy="11" r="8"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                </div>
+
+                                {/* Filter Buttons */}
+                                <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
+                                    <button
+                                        onClick={() => setOtherAgencyFilter('all')}
+                                        className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
+                                            otherAgencyFilter === 'all'
+                                                ? 'bg-white text-[#006BB4] shadow-xs'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        ทั้งหมด ({otherAgenciesAgents.length})
+                                    </button>
+                                    <button
+                                        onClick={() => setOtherAgencyFilter('warning')}
+                                        className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
+                                            otherAgencyFilter === 'warning'
+                                                ? 'bg-white text-rose-600 shadow-xs'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        ต้องตรวจสอบ ({otherAgenciesAgents.filter((a) => a.health_score < 80).length})
+                                    </button>
+                                    <button
+                                        onClick={() => setOtherAgencyFilter('healthy')}
+                                        className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
+                                            otherAgencyFilter === 'healthy'
+                                                ? 'bg-white text-emerald-700 shadow-xs'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        สมบูรณ์ ({otherAgenciesAgents.filter((a) => a.health_score >= 80).length})
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {filteredOtherAgencies.length === 0 ? (
+                            <div className="py-10 text-center text-xs text-slate-400 bg-slate-50/50 rounded-xl border border-slate-100">
+                                ไม่พบข้อมูลหน่วยงานที่ตรงกับคำค้นหา
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                {filteredOtherAgencies.map((ag) => {
+                                    const isWarning = ag.health_score < 80;
+                                    const isCritical = ag.health_score < 65;
+
+                                    return (
+                                        <div
+                                            key={ag.code}
+                                            onClick={() => setSelectedHospitalDetail(ag)}
+                                            className={`rounded-xl border p-4 transition duration-150 hover:shadow-md cursor-pointer flex flex-col justify-between ${
+                                                isCritical
+                                                    ? 'bg-rose-50/25 border-rose-200 hover:border-rose-400'
+                                                    : isWarning
+                                                    ? 'bg-amber-50/20 border-amber-200 hover:border-amber-400'
+                                                    : 'bg-white border-slate-200 hover:border-[#006BB4]/50'
+                                            }`}
+                                        >
+                                            <div>
+                                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="font-mono text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 px-1.5 py-0.5 rounded">
+                                                            รหัส {ag.code}
+                                                        </span>
+                                                        {ag.province && (
+                                                            <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded truncate max-w-[110px]">
+                                                                {ag.province}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span
+                                                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 ${
+                                                            ag.health_score >= 80
+                                                                ? 'bg-emerald-100 text-emerald-800'
+                                                                : ag.health_score >= 65
+                                                                ? 'bg-amber-100 text-amber-800'
+                                                                : 'bg-rose-100 text-rose-800'
+                                                        }`}
+                                                    >
+                                                        <span
+                                                            className={`w-1.5 h-1.5 rounded-full ${
+                                                                ag.health_score >= 80
+                                                                    ? 'bg-emerald-500'
+                                                                    : ag.health_score >= 65
+                                                                    ? 'bg-amber-500'
+                                                                    : 'bg-rose-500 animate-ping'
+                                                            }`}
+                                                        ></span>
+                                                        {ag.health_score}%
+                                                    </span>
+                                                </div>
+
+                                                <h3 className="text-xs font-bold text-slate-800 line-clamp-1" title={ag.name}>
+                                                    {ag.name}
+                                                </h3>
+                                                <p className="text-[10px] text-slate-500 mb-3 line-clamp-1" title={ag.type}>
+                                                    {ag.type}
+                                                </p>
+
+                                                {/* Health bar */}
+                                                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-3">
+                                                    <div
+                                                        className={`h-full transition-all duration-500 rounded-full ${
+                                                            ag.health_score >= 80
+                                                                ? 'bg-emerald-500'
+                                                                : ag.health_score >= 65
+                                                                ? 'bg-amber-500'
+                                                                : 'bg-rose-500'
+                                                        }`}
+                                                        style={{ width: `${ag.health_score}%` }}
+                                                    ></div>
+                                                </div>
+                                            </div>
+
+                                            {/* Metrics footer */}
+                                            <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-slate-500 font-medium">โหนดรวม:</span>
+                                                    <strong className="text-slate-800">{ag.total}</strong>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-[11px]">
+                                                    <span className="text-emerald-700 font-bold flex items-center gap-1">
+                                                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                                        {ag.active}
+                                                    </span>
+                                                    <span className="text-slate-300">/</span>
+                                                    <span className="text-rose-600 font-bold flex items-center gap-1">
+                                                        <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                                                        {ag.disconnected}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                     {/* SECTION 3: SOC WEBBOARD DAILY OPERATIONAL BRIEFING & SHIFT LOG */}
@@ -1280,8 +1612,18 @@ export default function Dashboard({
                                 <div
                                     onClick={() =>
                                         openModule(
-                                            'Configuration Assessment',
-                                            'สแกนตรวจสอบการกำหนดค่าความปลอดภัยเซิร์ฟเวอร์โรงพยาบาลตามมาตรฐาน CIS Benchmark'
+                                            'Configuration Assessment (SCA)',
+                                            'สแกนตรวจสอบการตั้งค่าความมั่นคงปลอดภัยของระบบปฏิบัติการและเซิร์ฟเวอร์ฐานข้อมูลโรงพยาบาลตามมาตรฐาน CIS Benchmark อัตโนมัติ',
+                                            {
+                                                badge: 'CIS Benchmark',
+                                                badgeColor: 'bg-[#006BB4]',
+                                                details: [
+                                                    { label: 'สถานะโมดูล (Module Status)', value: 'เปิดใช้งาน (Continuous Security Configuration Assessment)', highlight: 'emerald' },
+                                                    { label: 'มาตรฐานที่ใช้ตรวจสอบ', value: 'CIS Benchmarks สำหรับ Windows Server, Ubuntu, Rocky Linux และ MySQL/PostgreSQL' },
+                                                    { label: 'รายการตรวจสอบหลัก', value: 'รหัสผ่าน, สิทธิ์ผู้ใช้งาน, การปิดพอร์ตและบริการที่ไม่จำเป็น, การตั้งค่า Firewall' },
+                                                    { label: 'ขอบเขตโหนดที่ตรวจสอบ', value: `โหนดที่ออนไลน์ ${agentsSummary.active} โหนด จาก 13 โรงพยาบาลในสังกัด สสจ.พิจิตร` },
+                                                ],
+                                            }
                                         )
                                     }
                                     className="bg-white border border-[#D3DAE6] hover:border-[#006BB4] rounded-lg p-4 flex items-start gap-3 cursor-pointer transition hover:shadow-md group"
@@ -1302,7 +1644,17 @@ export default function Dashboard({
                                     onClick={() =>
                                         openModule(
                                             'Malware Detection',
-                                            'ตรวจจับสัญญาณพฤติกรรมมัลแวร์ แรนซัมแวร์ และการโจมตีทางไซเบอร์ต่อฐานข้อมูลสุขภาพ'
+                                            'ตรวจจับสัญญาณพฤติกรรมมัลแวร์ แรนซัมแวร์ โทรจัน และไฟล์ต้องสงสัยบนเครื่องแม่ข่ายและลูกข่ายในระบบสารสนเทศสุขภาพ',
+                                            {
+                                                badge: 'Rootcheck & YARA',
+                                                badgeColor: 'bg-rose-600',
+                                                details: [
+                                                    { label: 'สถานะโมดูล (Module Status)', value: 'เฝ้าระวังแบบ Real-time พร้อม Active Response', highlight: 'emerald' },
+                                                    { label: 'กลไกการตรวจจับ', value: 'Wazuh Rootcheck, YARA Signatures, VirusTotal Integration & System Call Anomaly' },
+                                                    { label: 'เป้าหมายการป้องกันหลัก', value: 'ป้องกัน Ransomware เข้ารหัสฐานข้อมูล HOSxP / HIS และตรวจจับ Webshell' },
+                                                    { label: 'การตอบสนองเมื่อพบภัยคุกคาม', value: 'กักกันไฟล์ต้องสงสัยและแจ้งเตือนทีม SOC ทันที', highlight: 'sky' },
+                                                ],
+                                            }
                                         )
                                     }
                                     className="bg-white border border-[#D3DAE6] hover:border-[#006BB4] rounded-lg p-4 flex items-start gap-3 cursor-pointer transition hover:shadow-md group"
@@ -1325,7 +1677,17 @@ export default function Dashboard({
                                     onClick={() =>
                                         openModule(
                                             'File Integrity Monitoring (FIM)',
-                                            'เฝ้าระวังการเปลี่ยนแปลง แก้ไข ลบไฟล์สำคัญในระบบเซิร์ฟเวอร์ HOSxP/Web Portal'
+                                            'เฝ้าระวังการเปลี่ยนแปลง แก้ไข เพิ่ม หรือลบไฟล์ระบบที่สำคัญ รวมถึง Registry และไฟล์ตั้งค่าของเซิร์ฟเวอร์ HOSxP และระบบสารสนเทศโรงพยาบาล',
+                                            {
+                                                badge: 'Syscheck Real-time',
+                                                badgeColor: 'bg-teal-600',
+                                                details: [
+                                                    { label: 'สถานะโมดูล (Module Status)', value: 'ตรวจสอบค่า Hash แบบ Real-time (SHA-256 / MD5)', highlight: 'emerald' },
+                                                    { label: 'พาธและโฟลเดอร์ที่เฝ้าระวัง', value: '/etc, /bin, /usr/sbin, C:\\Windows\\System32, และไดเรกทอรีระบบ HIS/HOSxP', mono: true },
+                                                    { label: 'ข้อมูลที่บันทึกเมื่อมีการเปลี่ยนแปลง', value: 'ชื่อผู้ใช้ที่แก้ไข, เวลาที่เปลี่ยน, ค่า Checksum ก่อน-หลัง และเนื้อหาที่ถูกแก้ไข (Diff)' },
+                                                    { label: 'ประโยชน์ด้านมาตรฐาน', value: 'รองรับการตรวจสอบตามมาตรฐาน ISO/IEC 27001 และ พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล (PDPA)' },
+                                                ],
+                                            }
                                         )
                                     }
                                     className="bg-white border border-[#D3DAE6] hover:border-[#006BB4] rounded-lg p-4 flex items-start gap-3 cursor-pointer transition hover:shadow-md group"
@@ -1356,7 +1718,17 @@ export default function Dashboard({
                                     onClick={() =>
                                         openModule(
                                             'Threat Hunting',
-                                            'ค้นหาและวิเคราะห์ภัยคุกคามขั้นสูง ความพยายาม Brute Force รหัสผ่าน และการเข้าสู่ระบบผิดปกติ'
+                                            'การสืบค้นและวิเคราะห์ร่องรอยภัยคุกคามเชิงรุกจากคลังข้อมูล Log กลาง เพื่อค้นหาความผิดปกติที่ซ่อนเร้น เช่น การสุ่มรหัสผ่าน (Brute Force) หรือการเข้าถึงข้อมูลนอกเวลาทำการ',
+                                            {
+                                                badge: 'Proactive SOC',
+                                                badgeColor: 'bg-[#006BB4]',
+                                                details: [
+                                                    { label: 'สถานะการทำงาน', value: 'รวบรวมและจัดทำดัชนี Log แบบ Real-time บน OpenSearch', highlight: 'emerald' },
+                                                    { label: 'ปริมาณข้อมูลที่วิเคราะห์ (24 ชม.)', value: `รวมกว่า ${alertsSummary.low} เหตุการณ์ทั่วไป และ ${alertsSummary.medium} เหตุการณ์ระดับกลาง`, highlight: 'sky' },
+                                                    { label: 'รูปแบบการสืบค้นหลัก', value: 'SSH/RDP Brute-force, พฤติกรรมการดึงข้อมูลผู้ป่วยจำนวนมากผิดปกติ, Lateral Movement' },
+                                                    { label: 'เครื่องมือวิเคราะห์', value: 'CTMR OpenSearch Dashboards (wazuh-alerts-*)', mono: true },
+                                                ],
+                                            }
                                         )
                                     }
                                     className="bg-white border border-[#D3DAE6] hover:border-[#006BB4] rounded-lg p-4 flex items-start gap-3 cursor-pointer transition hover:shadow-md group"
@@ -1376,8 +1748,18 @@ export default function Dashboard({
                                 <div
                                     onClick={() =>
                                         openModule(
-                                            'Vulnerability Detection',
-                                            'ตรวจสอบช่องโหว่ซอฟต์แวร์ CVE ฐานข้อมูลระบบ และระบบปฏิบัติการของ รพ. ทุกแห่ง'
+                                            'Vulnerability Detection (CVE Scanner)',
+                                            'สแกนและตรวจสอบช่องโหว่ของซอฟต์แวร์ แพ็กเกจระบบปฏิบัติการ และฐานข้อมูลที่ติดตั้งอยู่ในโหนดของโรงพยาบาลเทียบกับฐานข้อมูลช่องโหว่สากล (CVE)',
+                                            {
+                                                badge: 'CVE & NVD Feed',
+                                                badgeColor: 'bg-amber-500',
+                                                details: [
+                                                    { label: 'สถานะโมดูล (Module Status)', value: 'สแกนรายการซอฟต์แวร์ (Syscollector) และเทียบฐานข้อมูล CVE อัตโนมัติ', highlight: 'emerald' },
+                                                    { label: 'ฐานข้อมูลอ้างอิง', value: 'National Vulnerability Database (NVD), Canonical, RedHat, Microsoft Security Guide' },
+                                                    { label: 'ระดับการจัดลำดับความสำคัญ', value: 'จำแนกตามคะแนน CVSS v3 (Critical, High, Medium, Low)' },
+                                                    { label: 'แนวทางปฏิบัติสำหรับ รพ.', value: 'แจ้งเตือนผู้ดูแลระบบของโรงพยาบาลให้อัปเดต Security Patch ในโหนดที่พบช่องโหว่' },
+                                                ],
+                                            }
                                         )
                                     }
                                     className="bg-white border border-[#D3DAE6] hover:border-[#006BB4] rounded-lg p-4 flex items-start gap-3 cursor-pointer transition hover:shadow-md group"
@@ -1396,8 +1778,18 @@ export default function Dashboard({
                                 <div
                                     onClick={() =>
                                         openModule(
-                                            'MITRE ATT&CK',
-                                            'การจำแนกรูปแบบการโจมตีตามเทคนิค Tactics & Techniques ของกรอบสากล MITRE ATT&CK'
+                                            'MITRE ATT&CK Framework Mapping',
+                                            'การจำแนกเหตุการณ์แจ้งเตือนภัยคุกคามตามยุทธวิธี (Tactics) และเทคนิค (Techniques) ของผู้โจมตีตามกรอบมาตรฐานสากล MITRE ATT&CK',
+                                            {
+                                                badge: 'MITRE Enterprise',
+                                                badgeColor: 'bg-indigo-600',
+                                                details: [
+                                                    { label: 'สถานะการเชื่อมโยงข้อมูล', value: 'แมปหมายเลข MITRE Technique ID เข้ากับ Wazuh Alert อัตโนมัติ', highlight: 'emerald' },
+                                                    { label: 'เทคนิคที่เฝ้าระวังเป็นพิเศษ', value: 'T1110 (Brute Force), T1078 (Valid Accounts), T1059 (Command Scripting), T1486 (Data Encrypted for Impact)', mono: true },
+                                                    { label: 'ประโยชน์ต่อทีม SOC สสจ.พิจิตร', value: 'ช่วยให้เข้าใจขั้นตอนการโจมตี (Kill Chain) และวางมาตรการป้องกันได้ตรงจุด' },
+                                                    { label: 'การแสดงผลบนหน้าแดชบอร์ด', value: 'แสดงรหัส MITRE ในตารางรายการเหตุการณ์แจ้งเตือนล่าสุดจาก Wazuh SIEM' },
+                                                ],
+                                            }
                                         )
                                     }
                                     className="bg-white border border-[#D3DAE6] hover:border-[#006BB4] rounded-lg p-4 flex items-start gap-3 cursor-pointer transition hover:shadow-md group"
@@ -1458,6 +1850,12 @@ export default function Dashboard({
 
                                     <div className="space-y-2 pt-2 border-t border-slate-200">
                                         <div className="flex justify-between py-1 border-b border-slate-100">
+                                            <span className="text-slate-500">รหัสสถานพยาบาล 5 หลัก:</span>
+                                            <code className="font-mono font-bold text-[#006BB4]">
+                                                {selectedHospitalDetail.hospcode || selectedHospitalDetail.code}
+                                            </code>
+                                        </div>
+                                        <div className="flex justify-between py-1 border-b border-slate-100">
                                             <span className="text-slate-500">อัตราความพร้อมระบบ (Health):</span>
                                             <strong className="text-slate-800">{selectedHospitalDetail.health_score}%</strong>
                                         </div>
@@ -1470,6 +1868,34 @@ export default function Dashboard({
                                             <span className="text-slate-800 font-medium">{selectedHospitalDetail.os_primary}</span>
                                         </div>
                                     </div>
+
+                                    {Array.isArray(selectedHospitalDetail.sample_agents) && selectedHospitalDetail.sample_agents.length > 0 && (
+                                        <div className="pt-2">
+                                            <div className="text-[11px] font-bold text-slate-700 mb-1.5">
+                                                ตัวอย่างโหนดในสังกัด (รหัส {selectedHospitalDetail.hospcode || selectedHospitalDetail.code}):
+                                            </div>
+                                            <div className="bg-slate-50 border border-slate-200 rounded-lg divide-y divide-slate-200/70 max-h-36 overflow-y-auto">
+                                                {selectedHospitalDetail.sample_agents.map((sa, idx) => (
+                                                    <div key={idx} className="px-3 py-1.5 flex items-center justify-between text-[11px]">
+                                                        <div className="font-mono text-slate-700 truncate">
+                                                            <span className="text-slate-400 mr-1.5">#{sa.id}</span>
+                                                            <strong className="text-slate-800">{sa.name}</strong>
+                                                            <span className="text-slate-400 ml-1.5">({sa.ip})</span>
+                                                        </div>
+                                                        <span
+                                                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                                                                sa.status === 'active'
+                                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                                    : 'bg-rose-100 text-rose-700'
+                                                            }`}
+                                                        >
+                                                            {sa.status}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="pt-3 flex justify-end gap-2">
                                         <button

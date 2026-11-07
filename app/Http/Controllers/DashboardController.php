@@ -31,6 +31,7 @@ class DashboardController extends Controller
     {
         $agentsSummary = $this->wazuhService->getAgentsSummary();
         $hospitalsAgents = $this->wazuhService->getHospitalAgentsBreakdown();
+        $otherAgenciesAgents = $this->wazuhService->getOtherAgenciesAgentsBreakdown();
         $alertsSummary = $this->wazuhService->getAlertsSummary();
         $connectionStatus = $this->wazuhService->getConnectionStatus();
 
@@ -154,6 +155,7 @@ class DashboardController extends Controller
         return Inertia::render('Dashboard', [
             'agentsSummary' => $agentsSummary,
             'hospitalsAgents' => $hospitalsAgents,
+            'otherAgenciesAgents' => $otherAgenciesAgents,
             'alertsSummary' => $alertsSummary,
             'connectionStatus' => $connectionStatus,
             'socWebboardSummary' => $socWebboardSummary,
@@ -308,6 +310,7 @@ class DashboardController extends Controller
 
         $agentsSummary = $this->wazuhService->getAgentsSummary();
         $hospitalsAgents = $this->wazuhService->getHospitalAgentsBreakdown();
+        $otherAgenciesAgents = $this->wazuhService->getOtherAgenciesAgentsBreakdown();
         $alertsSummary = $this->wazuhService->getAlertsSummary();
         $connectionStatus = $this->wazuhService->getConnectionStatus();
 
@@ -315,6 +318,7 @@ class DashboardController extends Controller
             'success' => true,
             'agentsSummary' => $agentsSummary,
             'hospitalsAgents' => $hospitalsAgents,
+            'otherAgenciesAgents' => $otherAgenciesAgents,
             'alertsSummary' => $alertsSummary,
             'connectionStatus' => $connectionStatus,
             'lastUpdated' => Carbon::now()->timezone('Asia/Bangkok')->format('H:i:s'),

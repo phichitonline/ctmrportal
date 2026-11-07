@@ -6,7 +6,14 @@ export default function CtmrLayout({ children, title = 'Overview', activeNav = '
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const [hospitalModalOpen, setHospitalModalOpen] = useState(false);
-    const [moduleModal, setModuleModal] = useState({ open: false, title: '', desc: '', target: '' });
+    const [moduleModal, setModuleModal] = useState({
+        open: false,
+        title: '',
+        desc: '',
+        badge: '',
+        badgeColor: 'bg-[#006BB4]',
+        details: [],
+    });
     const [flashVisible, setFlashVisible] = useState(true);
 
     const [selectedAgency, setSelectedAgency] = useState({
@@ -65,12 +72,31 @@ export default function CtmrLayout({ children, title = 'Overview', activeNav = '
         setLastUpdated(new Date().toLocaleTimeString('th-TH'));
     };
 
-    const openModule = (modTitle, modDesc) => {
+    const openModule = (modTitle, modDesc, options = {}) => {
+        const defaultDetails = [
+            {
+                label: 'สถานะการทำงานในปัจจุบัน',
+                value: options.statusText || 'เปิดใช้งานและกำลังเฝ้าระวังแบบ Real-time (24/7)',
+                highlight: 'emerald',
+            },
+            {
+                label: 'ขอบเขตการประมวลผลข้อมูล',
+                value: options.scopeText || 'เครือข่าย 13 โรงพยาบาลและหน่วยงานในสังกัด สสจ.พิจิตร (CTMR Phichit)',
+            },
+            {
+                label: 'แหล่งข้อมูลและมาตรฐานอ้างอิง',
+                value: options.rulesetText || 'Wazuh SIEM v4.12.0 & OpenSearch Security Analytics (ctmr.ppho.go.th)',
+                mono: true,
+            },
+        ];
+
         setModuleModal({
             open: true,
             title: modTitle,
             desc: modDesc,
-            target: selectedAgency.name + ` (Agent ${selectedAgency.id})`,
+            badge: options.badge || '',
+            badgeColor: options.badgeColor || 'bg-[#006BB4]',
+            details: Array.isArray(options.details) && options.details.length > 0 ? options.details : defaultDetails,
         });
     };
 
@@ -715,35 +741,50 @@ export default function CtmrLayout({ children, title = 'Overview', activeNav = '
             {/* SECURITY MODULE DETAIL MODAL */}
             {moduleModal.open && (
                 <div className="fixed inset-0 z-[2000] bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-2xl w-full flex flex-col overflow-hidden">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-xl max-w-2xl w-full flex flex-col overflow-hidden">
                         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-                            <div className="flex items-center gap-2">
-                                <span className="w-3 h-3 rounded-full bg-[#006BB4]"></span>
+                            <div className="flex items-center gap-2.5">
+                                <span className={`w-3 h-3 rounded-full shrink-0 ${moduleModal.badgeColor || 'bg-[#006BB4]'}`}></span>
                                 <h3 className="text-base font-bold text-slate-800">{moduleModal.title}</h3>
+                                {moduleModal.badge && (
+                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-200/80 text-slate-700">
+                                        {moduleModal.badge}
+                                    </span>
+                                )}
                             </div>
                             <button onClick={closeModule} className="text-slate-400 hover:text-slate-600 p-1 rounded cursor-pointer">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </button>
                         </div>
-                        <div className="p-6 space-y-3">
-                            <p className="text-sm text-slate-600 leading-relaxed">{moduleModal.desc}</p>
-                            <div className="bg-slate-50 border border-slate-200 rounded p-3 text-xs space-y-2">
-                                <div className="flex justify-between">
-                                    <span className="text-slate-500">สถานะการทำงานในปัจจุบัน:</span>
-                                    <span className="font-semibold text-emerald-600">เปิดใช้งานและกำลังเฝ้าระวังแบบ Real-time</span>
+                        <div className="p-6 space-y-4">
+                            <p className="text-sm text-slate-700 leading-relaxed">{moduleModal.desc}</p>
+                            {Array.isArray(moduleModal.details) && moduleModal.details.length > 0 && (
+                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs divide-y divide-slate-200/70">
+                                    {moduleModal.details.map((item, idx) => {
+                                        const valClass =
+                                            item.highlight === 'emerald'
+                                                ? 'font-bold text-emerald-700'
+                                                : item.highlight === 'rose'
+                                                ? 'font-bold text-rose-600'
+                                                : item.highlight === 'amber'
+                                                ? 'font-bold text-amber-700'
+                                                : item.highlight === 'sky'
+                                                ? 'font-bold text-[#006BB4]'
+                                                : item.mono
+                                                ? 'font-mono font-medium text-slate-700'
+                                                : 'font-semibold text-slate-800';
+                                        return (
+                                            <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-2 first:pt-0 last:pb-0">
+                                                <span className="text-slate-500 font-medium shrink-0">{item.label}:</span>
+                                                <span className={`${valClass} sm:text-right`}>{item.value}</span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-slate-500">หน่วยงานเป้าหมาย:</span>
-                                    <span className="font-semibold text-slate-700">{moduleModal.target}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-slate-500">กฎความปลอดภัย (Ruleset):</span>
-                                    <span className="font-mono text-slate-700">Wazuh Ruleset v4.7.2-r3</span>
-                                </div>
-                            </div>
+                            )}
                         </div>
                         <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
-                            <button onClick={closeModule} className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded cursor-pointer">
+                            <button onClick={closeModule} className="px-4 py-1.5 bg-[#006BB4] hover:bg-[#005590] text-white text-xs font-semibold rounded-lg cursor-pointer transition">
                                 ตกลง
                             </button>
                         </div>

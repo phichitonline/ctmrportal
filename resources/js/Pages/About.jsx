@@ -3,7 +3,17 @@ import { Link } from '@inertiajs/react';
 import CtmrLayout from '@/Layouts/CtmrLayout';
 
 export default function About({
-    stats = { nodes: 613, hospitals: 12, availability: '99.9%', sla: '< 15 นาที' }
+    stats = {
+        nodes: 647,
+        active_nodes: 267,
+        disconnected_nodes: 376,
+        hospitals: 13,
+        other_agencies: 31,
+        total_agencies: 44,
+        availability: '99.9%',
+        sla: '< 15 นาที',
+        source: 'live',
+    }
 }) {
     return (
         <CtmrLayout title="About Team" activeNav="about">
@@ -31,7 +41,7 @@ export default function About({
                                     </div>
                                     <div className="flex items-center gap-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 px-3 py-1.5 rounded-md shadow-2xs">
                                         <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                                        ครอบคลุม 12 รพ. + 120 รพ.สต.
+                                        ครอบคลุม {stats.hospitals} หน่วยงานหลัก สสจ.พิจิตร (+{stats.other_agencies} เครือข่าย)
                                     </div>
                                     <div className="flex items-center gap-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 px-3 py-1.5 rounded-md shadow-2xs">
                                         <span className="w-2 h-2 rounded-full bg-amber-500"></span>
@@ -42,13 +52,25 @@ export default function About({
 
                             {/* Stats summary badge block */}
                             <div className="grid grid-cols-2 gap-3 w-full lg:w-auto flex-shrink-0">
-                                <div className="bg-white border border-slate-200 rounded-lg p-4 text-center shadow-2xs">
+                                <div
+                                    className="bg-white border border-slate-200 rounded-lg p-4 text-center shadow-2xs"
+                                    title={`ออนไลน์ ${stats.active_nodes} โหนด / ออฟไลน์ ${stats.disconnected_nodes} โหนด (ดึงข้อมูลจริงจาก CTMR)`}
+                                >
                                     <div className="text-2xl font-bold text-[#006BB4]">{stats.nodes}</div>
                                     <div className="text-xs text-slate-500 mt-0.5">เครื่องแม่ข่าย & ลูกข่าย</div>
+                                    <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                                        Active {stats.active_nodes} โหนด
+                                    </div>
                                 </div>
-                                <div className="bg-white border border-slate-200 rounded-lg p-4 text-center shadow-2xs">
-                                    <div className="text-2xl font-bold text-emerald-600">{stats.hospitals}</div>
-                                    <div className="text-xs text-slate-500 mt-0.5">โรงพยาบาลในเครือข่าย</div>
+                                <div
+                                    className="bg-white border border-slate-200 rounded-lg p-4 text-center shadow-2xs"
+                                    title={`สสจ.พิจิตร ${stats.hospitals} แห่ง และหน่วยงานเครือข่ายอื่น ${stats.other_agencies} แห่ง (รวม ${stats.total_agencies} หน่วยงานใน CTMR)`}
+                                >
+                                    <div className="text-2xl font-bold text-emerald-600">{stats.total_agencies || stats.hospitals}</div>
+                                    <div className="text-xs text-slate-500 mt-0.5">โรงพยาบาล/หน่วยงานในเครือข่าย</div>
+                                    <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                                        พิจิตร {stats.hospitals} • เครือข่าย {stats.other_agencies}
+                                    </div>
                                 </div>
                                 <div className="bg-white border border-slate-200 rounded-lg p-4 text-center shadow-2xs">
                                     <div className="text-2xl font-bold text-amber-600">{stats.availability}</div>
@@ -250,11 +272,11 @@ export default function About({
                                 </div>
                                 <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                                     <span className="text-slate-500">โทรศัพท์สายตรง (ห้อง MIS):</span>
-                                    <span className="font-mono font-bold text-[#006BB4]">056-611-131 ต่อ 104, 105</span>
+                                    <span className="font-mono font-bold text-[#006BB4]">056-990354 ต่อ 203</span>
                                 </div>
                                 <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                                     <span className="text-slate-500">สายด่วนฉุกเฉิน (Hotline 24 ชม.):</span>
-                                    <span className="font-mono font-bold text-rose-600">089-xxx-xxxx (หัวหน้ากลุ่มงาน MIS)</span>
+                                    <span className="font-mono font-bold text-rose-600">064-4476000 (ผู้ประสานงาน Cybersecurity)</span>
                                 </div>
                                 <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                                     <span className="text-slate-500">อีเมลทางการรับแจ้งเหตุ:</span>
@@ -262,7 +284,7 @@ export default function About({
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <span className="text-slate-500">LINE Official Group:</span>
-                                    <span className="font-medium text-emerald-700 font-mono">@MIS-Phichit-Cyber</span>
+                                    <span className="font-medium text-emerald-700 font-mono">@357twjwh</span>
                                 </div>
                             </div>
                         </div>
